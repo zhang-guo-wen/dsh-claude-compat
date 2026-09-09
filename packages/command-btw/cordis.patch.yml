@@ -1,6 +1,0 @@
-- insert:
-    - id: command-btw
-      name: '@zhang-guo-wen/dsh-command-btw'
-      config:
-        provider: fork
-        maxQuestionBytes: 4096

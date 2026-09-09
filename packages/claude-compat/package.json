@@ -1,30 +1,41 @@
 {
   "name": "@zhang-guo-wen/dsh-claude-compat",
-  "description": "Claude Code compatibility: discover .claude/skills and CLAUDE.md rules for the DeepSeek Harness",
-  "version": "0.1.0-alpha.1",
+  "description": "Combined Claude Code compatibility: skills/rules discovery + /btw command (host) + settings UI (client)",
+  "version": "0.1.1-alpha.1",
   "type": "module",
   "main": "lib/index.mjs",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "default": "./lib/client.js"
     },
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"
   },
-  "files": [
-    "lib/index.mjs",
-    "cordis.patch.yml"
-  ],
-  "license": "MIT",
   "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "platform": "web"
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
   },
+  "files": [
+    "lib/index.mjs",
+    "lib/client.js",
+    "cordis.patch.yml"
+  ],
   "scripts": {
-    "build": "tsdown -c tsdown.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "build": "tsdown -c tsdown.config.ts && node build-client.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
@@ -35,7 +46,18 @@
     "@deepseek-ai/dsh-session": "*",
     "@deepseek-ai/dsh-skill": "*",
     "@deepseek-ai/dsh-system-prompt": "*",
-    "@deepseek-ai/dsh-tools": "*"
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-commands": "*",
+    "@deepseek-ai/dsh-session-projection": "*",
+    "@deepseek-ai/dsh-subagent": "*",
+    "@deepseek-ai/dsh-api-remotes": "*",
+    "@deepseek-ai/dsh-client-locale": "*",
+    "@deepseek-ai/dsh-client-ui-primitives": "*",
+    "@deepseek-ai/dsh-client-ui-settings": "*",
+    "@deepseek-ai/dsh-client-ui-slots": "*",
+    "@deepseek-ai/dsh-client-ui-renderer": "*",
+    "react": "*",
+    "react-dom": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -64,6 +86,39 @@
     },
     "@deepseek-ai/dsh-tools": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-projection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-subagent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-api-remotes": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-locale": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-renderer": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
     }
   },
   "dependencies": {
@@ -71,6 +126,7 @@
     "yaml": "^2.4.2"
   },
   "devDependencies": {
-    "@types/picomatch": "^4.0.2"
+    "@types/picomatch": "^4.0.2",
+    "@types/react": "~18.3.1"
   }
 }

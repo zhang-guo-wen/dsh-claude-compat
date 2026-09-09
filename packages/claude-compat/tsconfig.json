@@ -1,13 +1,14 @@
 {
-  "extends": "../../../deepseek-harness/tsconfig.base.json",
+  "extends": "../../../deepseek-harness/tsconfig.base.client.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib/types",
     "composite": false,
     "incremental": false,
+    "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
+    "types": ["node"],
     "tsBuildInfoFile": "node_modules/.cache/claude-compat.tsbuildinfo"
   },
   "include": ["src"]
 }
-

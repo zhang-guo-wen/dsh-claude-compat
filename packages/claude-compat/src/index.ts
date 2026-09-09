@@ -1,20 +1,13 @@
 /**
- * Claude Code compatibility plugin for the DeepSeek Harness.
+ * Combined Claude Code compatibility plugin (host) with a browser settings UI (client).
  *
- * Registers a {@link ClaudeCodeSkillProvider} on `ctx.skills` so Claude Code's
- * directory-bundle skills (`<projectRoot>/.claude/skills` and `~/.claude/skills`)
- * appear in the same session catalog as every other skill source, and folds the
- * Claude Code rule files (`.claude/CLAUDE.md` and `~/.claude/CLAUDE.md`) into
- * the first request as their own instruction context. The scoped-rule contributor
- * also discovers `.claude/rules/**` and `~/.claude/rules/**`, folding always-on
- * rules at the first request and path-scoped rules when a matching file is read.
+ * Host: discovers Claude Code `.claude/skills` / `CLAUDE.md` / `.claude/rules/**` and
+ * Codex `AGENTS.md`, exposes the `context-injection` settings namespace, and registers
+ * the `/btw` side-question command (forked continuable child subagent).
+ * Client: `src/client` bundles the settings page into a `window.__ModuleLoader__`
+ * handoff artifact served at `/plugins/<id>/client.js`.
  *
- * It also owns the Codex rule contributor (`.codex/AGENTS.md` and
- * `~/.codex/AGENTS.md`) and the single `context-injection` settings namespace
- * whose two master toggles — `claude` and `codex` — decide whether each
- * contributor folds its rule files at all.
- *
- * @module @deepseek-ai/dsh-claude-compat
+ * @module @zhang-guo-wen/dsh-claude-compat
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -30,17 +23,23 @@ import {
   registerContextInjection,
   type ContextInjectionConfig,
 } from './context-injection.ts'
+import { apply as commandBtwApply } from './command-btw.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'claude-compat'
 
-/** Services required by this plugin (settings is optional and probed lazily). */
-export const inject = ['skills']
+/** Services required by this plugin. `systemPrompt` and `settings` are probed lazily. */
+export const inject = ['skills', 'commands', 'sessionProjections', 'subagents']
 
-/** Config forwarded to the provider, both instruction contributors, the rule contributor, and the namespace. */
-export interface Config extends ProviderConfig, InstructionConfig, RulesConfig, ContextInjectionConfig {
+/** Config forwarded to the provider, both instruction contributors, the rule contributor, the namespace, and `/btw`. */
+export interface Config
+  extends ProviderConfig, InstructionConfig, RulesConfig, ContextInjectionConfig {
   /** Codex home; defaults to `$CODEX_HOME` or `~/.codex`. */
   codexHome?: string
+  /** Maximum UTF-8 bytes in the `/btw` side question. */
+  maxQuestionBytes?: number
+  /** The `ctx.subagents` fork provider name (default `fork`). */
+  provider?: string
 }
 
 export const Config: Schema<Config> = z.object({
@@ -58,12 +57,13 @@ export const Config: Schema<Config> = z.object({
   maxRuleRenderBytes: z.number().step(1).min(0).default(262_144),
   claude: z.boolean().default(true),
   codex: z.boolean().default(true),
+  maxQuestionBytes: z.number().step(1).min(1).default(4096),
+  provider: z.string().min(1).default('fork'),
 })
 
 /**
- * Register the Claude Code skill provider and both instruction contributors.
- * The `context-injection` namespace supplies the `claude`/`codex` master
- * toggles; the plugin `config` supplies the composition base and default.
+ * Register the Claude Code skill provider and instruction/rule contributors,
+ * the `context-injection` namespace, and the `/btw` command.
  */
 export function apply(ctx: Context, config: Config = {}): void {
   const flags = registerContextInjection(ctx, config)
@@ -83,11 +83,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     ...config.projectRootMarkers !== undefined ? { projectRootMarkers: config.projectRootMarkers } : {},
   }
   codexInstructionListener(ctx, codexConfig, () => flags().codex)
-  // The user system prompt from the `context-injection` settings namespace is a
-  // real system-prompt section. Its text re-reads the live setting at each
-  // assembly, so a change lands on the next request without reloading; an empty
-  // prompt renders to nothing. The system-prompt service is optional here, so
-  // compositions without it (the minimal loader test) simply skip this section.
   const systemPrompt = ctx.get('systemPrompt') as SystemPrompt | undefined
   if (systemPrompt !== undefined) {
     systemPrompt.section({
@@ -96,4 +91,6 @@ export function apply(ctx: Context, config: Config = {}): void {
       text: () => flags().systemPrompt,
     })
   }
+  // `/btw` side-question command (forked continuable child subagent).
+  commandBtwApply(ctx, { maxQuestionBytes: config.maxQuestionBytes, provider: config.provider })
 }
