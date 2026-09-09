@@ -24,6 +24,11 @@ import {
   type ContextInjectionConfig,
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
+import { ClaudeCompatMcp } from './mcp-remote.ts'
+
+export { ClaudeCompatMcp } from './mcp-remote.ts'
+export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
+export type { McpEntryConfig, McpTransportConfig, McpSpec, McpTarget } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'claude-compat'
@@ -65,7 +70,7 @@ export const Config: Schema<Config> = z.object({
  * Register the Claude Code skill provider and instruction/rule contributors,
  * the `context-injection` namespace, and the `/btw` command.
  */
-export function apply(ctx: Context, config: Config = {}): void {
+export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const flags = registerContextInjection(ctx, config)
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().claude }))
   claudeInstructionListener(ctx, config, () => flags().claude)
@@ -93,4 +98,12 @@ export function apply(ctx: Context, config: Config = {}): void {
   }
   // `/btw` side-question command (forked continuable child subagent).
   commandBtwApply(ctx, { maxQuestionBytes: config.maxQuestionBytes, provider: config.provider })
+
+  // MCP authoring Remote: mount only when the Loader is present (global + agent-preset rows).
+  if (ctx.get('loader') !== undefined) {
+    await ctx.plugin(ClaudeCompatMcp)
+  }
 }
+
+
+

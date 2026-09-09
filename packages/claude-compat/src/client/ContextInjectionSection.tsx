@@ -11,9 +11,11 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { AddMcpRequest, EditMcpRequest } from '@deepseek-ai/dsh-api-remotes/client'
+import { McpEditor, type McpEditorMode, type McpEditorRequest } from './McpEditor.tsx'
 import { mcpDescriptionKey, type ContextInjectionSectionFace, type McpPhase, type McpServer } from './settings-controller.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
 import css from './ContextInjectionSection.module.css'
@@ -62,17 +64,21 @@ function statusOf(server: McpServer, t: Translate): { label: string; dot: StateD
   return { label: t(PHASE_LABEL[server.fiberPhase]), dot: PHASE_DOT[server.fiberPhase] }
 }
 
-/** One rendered MCP server row: name, plugin-owned description, scope and status. */
-function McpRow({ server, description, onEditDescription, t }: {
+/** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
+function McpRow({ server, description, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
   readonly server: McpServer
   readonly description: string
   readonly onEditDescription: (value: string) => void
+  readonly onEdit: () => void
+  readonly onToggleDisabled: (enabled: boolean) => void
+  readonly actionsDisabled: boolean
   readonly t: Translate
 }): ReactNode {
   const scope = server.scope === 'global'
     ? t('mcp.scopeGlobal')
     : `${t('mcp.scopePreset')} · ${server.presetId ?? ''}`
   const status = statusOf(server, t)
+  const disabledNow = server.enabled === false
   const [draft, setDraft] = useState<string | null>(null)
   const value = draft ?? description
   return (
@@ -94,6 +100,25 @@ function McpRow({ server, description, onEditDescription, t }: {
           <StateDot state={status.dot} />
           {status.label}
         </span>
+        <span className={css.mcpActions}>
+          <button
+            type="button"
+            className={css.mcpAction}
+            disabled={actionsDisabled}
+            onClick={onEdit}
+          >
+            {t('mcp.edit')}
+          </button>
+          {server.entryId !== null ? (
+            <Switch
+              checked={server.enabled !== false}
+              onChange={onToggleDisabled}
+              label={disabledNow ? t('mcp.enable') : t('mcp.disable')}
+              disabled={actionsDisabled}
+              title={t('mcp.status.disabled')}
+            />
+          ) : null}
+        </span>
       </div>
     </div>
   )
@@ -101,12 +126,21 @@ function McpRow({ server, description, onEditDescription, t }: {
 
 /** The settings section body. */
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
-  const { useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, mcps } = props
+  const {
+    useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription,
+    addMcp, editMcp, disableMcp, mcps,
+  } = props
   const state = useContextInjection(snapshot => snapshot)
   const [activeTab, setActiveTab] = useState<TabId>('prompt')
   const [promptDraft, setPromptDraft] = useState<string | null>(null)
   const [mcpView, setMcpView] = useState<McpView>({ status: 'loading' })
   const [mcpRequest, setMcpRequest] = useState(0)
+  const [editor, setEditor] = useState<{ mode: McpEditorMode; server: McpServer | undefined; open: boolean }>({
+    mode: 'add', server: undefined, open: false,
+  })
+  const [editorBusy, setEditorBusy] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
+  const [mcpActionError, setMcpActionError] = useState<string | null>(null)
   const disabled = !state.available || !state.writable
   const promptValue = promptDraft ?? state.systemPrompt
 
@@ -123,6 +157,61 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
   const commitPrompt = (): void => {
     if (promptDraft === null) return
     updateSystemPrompt(promptDraft)
+  }
+
+  const openAdd = (): void => {
+    setEditor({ mode: 'add', server: undefined, open: true })
+    setEditorError(null)
+    setMcpActionError(null)
+  }
+
+  const openEdit = (server: McpServer): void => {
+    setEditor({ mode: 'edit', server, open: true })
+    setEditorError(null)
+    setMcpActionError(null)
+  }
+
+  const closeEditor = (): void => {
+    if (editorBusy) return
+    setEditor(previous => ({ ...previous, open: false }))
+    setEditorError(null)
+  }
+
+  const refreshMcps = (): void => {
+    setMcpRequest(value => value + 1)
+  }
+
+  const submitEditor = async (request: McpEditorRequest): Promise<void> => {
+    setEditorBusy(true)
+    setEditorError(null)
+    setMcpActionError(null)
+    try {
+      if (editor.mode === 'add') await addMcp(request as AddMcpRequest)
+      else await editMcp(request as EditMcpRequest)
+      setEditor({ mode: editor.mode, server: undefined, open: false })
+      refreshMcps()
+    } catch (cause) {
+      setEditorError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setEditorBusy(false)
+    }
+  }
+
+  const toggleDisabled = async (server: McpServer, enabled: boolean): Promise<void> => {
+    if (server.entryId === null) return
+    const target = server.scope === 'global'
+      ? { scope: 'global' as const }
+      : { scope: 'preset' as const, agentPreset: server.presetId ?? '' }
+    setEditorBusy(true)
+    setMcpActionError(null)
+    try {
+      await disableMcp({ target, entryId: server.entryId, disabled: !enabled })
+      refreshMcps()
+    } catch (cause) {
+      setMcpActionError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setEditorBusy(false)
+    }
   }
 
   const switchRow = (
@@ -195,7 +284,12 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
         </div>
       ) : (
         <div className={css.panel} id="context-injection-mcp" role="tabpanel">
-          <p className={css.mcpSub}>{t('mcp.subtitle')}</p>
+          <div className={css.mcpToolbar}>
+            <p className={css.mcpSub}>{t('mcp.subtitle')}</p>
+            <Button variant="outline" size="sm" onClick={openAdd} disabled={editorBusy}>
+              {t('mcp.add')}
+            </Button>
+          </div>
           {mcpView.status === 'loading' ? <p className={css.mcpStatus}>{t('mcp.loading')}</p> : null}
           {mcpView.status === 'error' ? (
             <div className={css.mcpFailure}>
@@ -218,12 +312,27 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
                     server={server}
                     description={server.description ?? state.mcpDescriptions[key] ?? ''}
                     onEditDescription={(value) => { updateMcpDescription(key, value) }}
+                    onEdit={() => { openEdit(server) }}
+                    onToggleDisabled={(enabled) => { void toggleDisabled(server, enabled) }}
+                    actionsDisabled={editorBusy}
                     t={t}
                   />
                 )
               })}
             </div>
           ) : null}
+          {mcpActionError !== null ? <p className={css.mcpActionError} role="alert">{mcpActionError}</p> : null}
+          <McpEditor
+            open={editor.open}
+            mode={editor.mode}
+            server={editor.server}
+            disabled={false}
+            busy={editorBusy}
+            error={editorError}
+            t={t}
+            onClose={closeEditor}
+            onSubmit={(request) => { void submitEditor(request) }}
+          />
         </div>
       )}
     </div>

@@ -57,7 +57,12 @@
     "@deepseek-ai/dsh-client-ui-slots": "*",
     "@deepseek-ai/dsh-client-ui-renderer": "*",
     "react": "*",
-    "react-dom": "*"
+    "react-dom": "*",
+    "@deepseek-ai/cordis-plugin-include": "*",
+    "@deepseek-ai/cordis-plugin-loader": "*",
+    "@deepseek-ai/dsh-agent-presets": "*",
+    "@deepseek-ai/dsh-atomic-write": "*",
+    "@deepseek-ai/dsh-typert-protocol": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -119,11 +124,27 @@
     },
     "react-dom": {
       "optional": true
+    },
+    "@deepseek-ai/cordis-plugin-include": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis-plugin-loader": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-presets": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-atomic-write": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
     }
   },
   "dependencies": {
     "picomatch": "^4.0.4",
-    "yaml": "^2.4.2"
+    "yaml": "^2.4.2",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/picomatch": "^4.0.2",

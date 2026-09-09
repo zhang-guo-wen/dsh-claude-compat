@@ -14,7 +14,13 @@
  * @module @deepseek-ai/dsh-client-ui-context-injection/settings-controller
  */
 
-import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  AddMcpRequest,
+  DisableMcpRequest,
+  EditMcpRequest,
+  McpMutationResult,
+  PluginInventorySnapshot,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 
@@ -32,9 +38,23 @@ export function mcpDescriptionKey(server: McpServer): string {
   return server.scope === 'preset' ? `preset:${server.presetId ?? ''}:${server.serverName}` : `${server.scope}:${server.serverName}`
 }
 
+/**
+ * The local Loader row id from a loader-qualified id. A global mcp-client row
+ * is addressed as `<includePath>:<id>`, and the host writes `serverName` into
+ * the row's config; in the default add flow the local id equals that name.
+ * @param qualified - loader-qualified entry id.
+ * @returns the id segment after the last `:` separator.
+ */
+function localEntryId(qualified: string): string {
+  const separator = qualified.lastIndexOf(':')
+  return separator < 0 ? qualified : qualified.slice(separator + 1)
+}
+
 /** One loaded MCP server, as the MCP management tab presents it. */
 export interface McpServer {
-  /** Instance identifier (the Loader entry id, or a preset row's id). */
+  /** Loader entry id, or null when a preset row declares no id. */
+  entryId: string | null
+  /** MCP namespace shown in tool names. */
   serverName: string
   /** Authoring description; plugin-owned, resolved by the section from `mcpDescriptions`. */
   description?: string
@@ -54,6 +74,16 @@ export interface ContextInjectionFlags {
   codex: boolean
   systemPrompt: string
   mcpDescriptions: Record<string, string>
+}
+
+/** Host-authoring callbacks projected into the MCP management section. */
+export interface McpAuthoringActions {
+  /** Add one MCP row and resolve after the Host commits it. */
+  addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
+  /** Replace one MCP row and resolve after the Host commits it. */
+  editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
+  /** Set one MCP row's disabled flag and resolve after the Host commits it. */
+  disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
 }
 
 /** Snapshot the section renders. */
@@ -81,6 +111,12 @@ export interface ContextInjectionSectionFace {
   updateSystemPrompt: (value: string) => void
   /** Persist one MCP row's description. */
   updateMcpDescription: (key: string, description: string) => void
+  /** Add one MCP row through the Claude-compatible Host Remote. */
+  addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
+  /** Edit one MCP row through the Claude-compatible Host Remote. */
+  editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
+  /** Enable or disable one MCP row through the Claude-compatible Host Remote. */
+  disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
   /** Resolve the current loaded MCP roster from the Host plugin inventory. */
   mcps: () => Promise<readonly McpServer[]>
 }
@@ -98,7 +134,8 @@ export function mapMcpServers(snapshot: PluginInventorySnapshot): readonly McpSe
   for (const entry of snapshot.entries) {
     if (entry.moduleName !== MCP_CLIENT_MODULE) continue
     rows.push({
-      serverName: entry.entryId,
+      entryId: entry.entryId,
+      serverName: localEntryId(entry.entryId),
       scope: 'global',
       presetId: undefined,
       enabled: entry.enabled,
@@ -109,7 +146,8 @@ export function mapMcpServers(snapshot: PluginInventorySnapshot): readonly McpSe
     for (const row of preset.rows) {
       if (row.moduleName !== MCP_CLIENT_MODULE) continue
       rows.push({
-        serverName: row.entryId ?? row.moduleName,
+        entryId: row.entryId,
+        serverName: localEntryId(row.entryId ?? row.moduleName),
         scope: 'preset',
         presetId: preset.id,
         enabled: row.enabled,
@@ -128,10 +166,12 @@ export class ContextInjectionController {
   /**
    * @param scope - bound `context-injection` settings scope.
    * @param mcps - Host-backed MCP roster loader.
+   * @param authoring - Host-backed MCP mutation callbacks.
    */
   constructor(
     private readonly scope: SettingsScope<ContextInjectionFlags>,
     private readonly mcps: () => Promise<readonly McpServer[]>,
+    private readonly authoring: McpAuthoringActions,
   ) {
     this.store = createSnapshotStore(this.projection())
     this.unsubscribe = scope.subscribe(() => this.publish())
@@ -149,6 +189,9 @@ export class ContextInjectionController {
       toggle: (name) => { this.toggle(name) },
       updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
       updateMcpDescription: (key, description) => { this.updateMcpDescription(key, description) },
+      addMcp: this.authoring.addMcp,
+      editMcp: this.authoring.editMcp,
+      disableMcp: this.authoring.disableMcp,
       mcps: this.mcps,
     }
   }

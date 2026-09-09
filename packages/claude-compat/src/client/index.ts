@@ -26,8 +26,10 @@ import {
   ContextInjectionController,
   mapMcpServers,
   type ContextInjectionFlags,
+  type McpAuthoringActions,
   type McpServer,
 } from './settings-controller.ts'
+import type { McpMutationResult, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 
 export type { ContextInjectionSectionProps } from './ContextInjectionSection.tsx'
 export type { ContextInjectionSectionFace, ContextInjectionSectionState, McpServer } from './settings-controller.ts'
@@ -43,6 +45,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory']
 
+/** Convert a generated Remote result into the callback face used by the form. */
+async function unwrapMcpMutation(result: Promise<RemoteResult<McpMutationResult>>): Promise<McpMutationResult> {
+  const response = await result
+  if (!response.ok) throw new Error(response.error.message)
+  return response.value
+}
+
 /**
  * Register the dictionaries and the context-injection settings section.
  * @param ctx - client root context.
@@ -57,9 +66,15 @@ export function apply(ctx: Context): void {
     }
     return mapMcpServers(result.value)
   }
+  const authoring: McpAuthoringActions = {
+    addMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.addMcp(request)),
+    editMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.editMcp(request)),
+    disableMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.disableMcp(request)),
+  }
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
     mcps,
+    authoring,
   )
   ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: scope')
 
