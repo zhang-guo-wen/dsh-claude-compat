@@ -1,0 +1,14 @@
+{
+  "extends": "../../../deepseek-harness/tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "composite": false,
+    "incremental": false,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": true,
+    "tsBuildInfoFile": "node_modules/.cache/ui-context-injection.tsbuildinfo"
+  },
+  "include": ["src"]
+}
+

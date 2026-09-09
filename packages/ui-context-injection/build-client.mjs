@@ -1,0 +1,53 @@
+// build-client.mjs — bundle src/client into the DSH client-loader handoff format.
+// window.__ModuleLoader__.load({ id, factory }). react + @deepseek-ai/* external.
+// CSS modules compiled with lightningcss: `.module.css` -> hashed class map + <style> inject.
+import { rolldown } from 'rolldown'
+import { transform } from 'lightningcss'
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+const root = dirname(fileURLToPath(import.meta.url))
+const HANDOFF_ID = '@zhang-guo-wen/dsh-client-ui-context-injection'
+const VIRT = '\0dsh-css:'
+const SUFFIX = '.mjs'
+
+const banner = 'window.__ModuleLoader__.load({ id: ' + JSON.stringify(HANDOFF_ID) + ', factory: (require) => {'
+const footer = 'return module.exports; } });'
+const intro = 'var module = { exports: {} }; var exports = module.exports;'
+
+const cssModulePlugin = {
+  name: 'dsh-css-modules-inline',
+  resolveId(source, importer) {
+    if (!source.endsWith('.module.css')) return null
+    const abs = importer ? join(dirname(importer), source) : source
+    return VIRT + abs + SUFFIX
+  },
+  async load(id) {
+    if (!id.startsWith(VIRT)) return null
+    const fileId = id.slice(VIRT.length, -SUFFIX.length)
+    this.addWatchFile?.(fileId)
+    const css = await readFile(fileId)
+    const { code, exports: cssExports } = transform({
+      filename: fileId,
+      code: css,
+      cssModules: { pattern: '[hash]_[local]' },
+      minify: true,
+    })
+    const classMap = {}
+    for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+    const tagId = fileId.split(/[\\/]/).pop()
+    const tag = 'if(typeof document!==\'undefined\'){var t=document.querySelector(\'style[data-plugin-css="' + JSON.stringify(tagId) + '"]\');if(!t){t=document.createElement(\'style\');t.dataset.pluginCss=' + JSON.stringify(tagId) + ';t.textContent=' + JSON.stringify(code.toString()) + ';document.head.appendChild(t);}}'
+    return tag + '\nexport default ' + JSON.stringify(classMap) + ';'
+  },
+}
+
+const bundle = await rolldown({
+  input: join(root, 'src', 'client', 'index.ts'),
+  platform: 'browser',
+  external: [/^react$/, /^react\//, /^@deepseek-ai\//],
+  plugins: [cssModulePlugin],
+})
+await bundle.write({ format: 'cjs', file: join(root, 'lib', 'client.js'), banner, footer, intro, sourcemap: false })
+console.log('lib/client.js written (ModuleLoader handoff bundle)')
+
