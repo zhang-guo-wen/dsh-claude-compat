@@ -24,7 +24,6 @@ import {
   type ContextInjectionConfig,
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
-import { registerMcpHttpRoute } from './mcp-http.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
@@ -102,10 +101,8 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   // MCP authoring Remote: mount only when the Loader is present (global + agent-preset rows).
   if (ctx.get('loader') !== undefined) {
-    await ctx.plugin(ClaudeCompatMcp)
+    new ClaudeCompatMcp(ctx)
   }
-  // Plain HTTP route so the browser settings page can add/edit/disable MCP rows.
-  registerMcpHttpRoute(ctx)
 }
 
 

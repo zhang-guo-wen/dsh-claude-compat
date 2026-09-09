@@ -11,6 +11,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.5-alpha.1",
     "@types/node": "^26.5.0",
     "lightningcss": "^1.32.0",
     "rolldown": "^1.0.0",

@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the Remote namespaces this plugin reads (ctx.remote.pluginInventory).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { ContextInjectionSection } from './ContextInjectionSection.tsx'
 import { en, NS, zh, type ContextInjectionSectionKey } from './locales.ts'
 import {
@@ -29,7 +30,13 @@ import {
   type McpAuthoringActions,
   type McpServer,
 } from './settings-controller.ts'
-import type { McpMutationResult } from '../types.ts'
+import { TYPERT_REMOTE, REMOTE_NAMESPACE } from '../remote.ts'
+import type {
+  AddMcpRequest,
+  DisableMcpRequest,
+  EditMcpRequest,
+  McpMutationResult,
+} from '../types.ts'
 
 export type { ContextInjectionSectionProps } from './ContextInjectionSection.tsx'
 export type { ContextInjectionSectionFace, ContextInjectionSectionState, McpServer } from './settings-controller.ts'
@@ -45,23 +52,28 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory']
 
-/** Convert a generated Remote result into the callback face used by the form. */
-async function unwrapMcpMutation(action: string, request: object): Promise<McpMutationResult> {
-  const response = await fetch('/api/claude-compat/mcp', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action, ...request }),
-  })
-  const json = await response.json() as { ok?: boolean; result?: McpMutationResult; error?: string }
-  if (!json.ok || json.result === undefined) throw new Error(json.error ?? 'MCP mutation failed')
-  return json.result
+/** The namespace service this plugin mounts itself — fetched via `ctx.get`, never injected. */
+interface ClaudeCompatMcpNamespace {
+  addMcp(request: AddMcpRequest): Promise<RemoteResult<McpMutationResult>>
+  editMcp(request: EditMcpRequest): Promise<RemoteResult<McpMutationResult>>
+  disableMcp(request: DisableMcpRequest): Promise<RemoteResult<McpMutationResult>>
+}
+
+/** Unwrap a Typert `RemoteResult` or surface the Host failure. */
+async function unwrapRemote<T>(call: () => Promise<RemoteResult<T>>): Promise<T> {
+  const result = await call()
+  if (!result.ok) throw new Error(result.error.message)
+  return result.value
 }
 
 /**
  * Register the dictionaries and the context-injection settings section.
  * @param ctx - client root context.
  */
-export function apply(ctx: Context): void {
+export async function apply(ctx: Context): Promise<void> {
+  const disposeMount = await ctx.remote.$mount(TYPERT_REMOTE)
+  ctx.effect(() => () => disposeMount(), 'claude-compat: remote mount')
+
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-context-injection: dictionaries')
   const t = ctx.locale.bind(NS)
   const mcps = async (): Promise<readonly McpServer[]> => {
@@ -71,10 +83,17 @@ export function apply(ctx: Context): void {
     }
     return mapMcpServers(result.value)
   }
+  const mcpMgr = (): ClaudeCompatMcpNamespace => {
+    const namespace = ctx.get(`remote.${REMOTE_NAMESPACE}`) as ClaudeCompatMcpNamespace | undefined
+    if (namespace === undefined) {
+      throw new Error(`${REMOTE_NAMESPACE} namespace service is not mounted`)
+    }
+    return namespace
+  }
   const authoring: McpAuthoringActions = {
-    addMcp: request => unwrapMcpMutation('add', request),
-    editMcp: request => unwrapMcpMutation('edit', request),
-    disableMcp: request => unwrapMcpMutation('disable', request),
+    addMcp: request => unwrapRemote(() => mcpMgr().addMcp(request)),
+    editMcp: request => unwrapRemote(() => mcpMgr().editMcp(request)),
+    disableMcp: request => unwrapRemote(() => mcpMgr().disableMcp(request)),
   }
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
