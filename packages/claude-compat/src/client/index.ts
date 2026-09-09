@@ -46,10 +46,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory']
 
 /** Convert a generated Remote result into the callback face used by the form. */
-async function unwrapMcpMutation(result: Promise<RemoteResult<McpMutationResult>>): Promise<McpMutationResult> {
-  const response = await result
-  if (!response.ok) throw new Error(response.error.message)
-  return response.value
+async function unwrapMcpMutation(action: string, request: object): Promise<McpMutationResult> {
+  const response = await fetch('/api/claude-compat/mcp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action, ...request }),
+  })
+  const json = await response.json() as { ok?: boolean; result?: McpMutationResult; error?: string }
+  if (!json.ok || json.result === undefined) throw new Error(json.error ?? 'MCP mutation failed')
+  return json.result
 }
 
 /**
@@ -87,6 +92,7 @@ export function apply(ctx: Context): void {
     inject: () => controller.inject(),
   }, ContextInjectionSection))
 }
+
 
 
 
