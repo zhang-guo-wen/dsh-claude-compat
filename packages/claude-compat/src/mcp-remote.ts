@@ -126,7 +126,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
           throw conflict(target, entryId, request.serverName, 'the serverName is already in use')
         }
       }, this.warnPatch)
-      const createdId = await this.ctx.loader.create({
+      const createdId = await this.loader().create({
         id: entryId,
         name: MCP_CLIENT_MODULE,
         config,
@@ -158,7 +158,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       this.assertServerNameAvailable(
         [...include.tree.entries()], request.entryId, request.serverName, target,
       )
-      await this.ctx.loader.update(request.entryId, { config })
+      await this.loader().update(request.entryId, { config })
       const rowId = entry.options.id
       await writeEntryListFile(include.tree.filename, target, { id: rowId, name: MCP_CLIENT_MODULE, config }, (rows) => {
         this.presetMcpRow(rows, rowId, target)
@@ -189,7 +189,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       if (serverName === undefined) {
         throw invalid(target, 'the MCP row has no valid serverName')
       }
-      await this.ctx.loader.update(request.entryId, { disabled: request.disabled })
+      await this.loader().update(request.entryId, { disabled: request.disabled })
       const rowId = entry.options.id
       await writeEntryListFile(include.tree.filename, target, {
         id: rowId, name: MCP_CLIENT_MODULE, disabled: request.disabled,
@@ -227,7 +227,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
   }
 
   private async globalInclude(target: Extract<McpTarget, { scope: 'global' }>): Promise<{ entry: Entry; tree: WritableIncludeTree }> {
-    const includes = [...this.ctx.loader.entries()].filter(entry => entry.options.name === 'cordis:include' && entry.subtree)
+    const includes = [...this.loader().entries()].filter(entry => entry.options.name === 'cordis:include' && entry.subtree)
     if (includes.length !== 1) {
       throw new RemoteError('mcp/unavailable', 'global MCP authoring requires exactly one file-backed Include', {
         reason: includes.length === 0 ? 'no root Include is mounted' : `${includes.length} Includes are mounted`,
@@ -262,7 +262,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
   private globalMcpEntry(entryId: string, target: McpTarget, tree: IncludeTree): Entry {
     let entry: Entry
     try {
-      entry = this.ctx.loader.resolve(entryId)
+      entry = this.loader().resolve(entryId)
     } catch (cause) {
       throw new RemoteError('mcp/not-found', `MCP loader row "${entryId}" was not found`, { target, entryId }, { cause })
     }
@@ -299,6 +299,18 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       if (serverNameOf(options) === serverName) {
         throw conflict(target, entryId, serverName, 'the serverName is already in use')
       }
+    }
+  }
+
+  /** Resolve the Loader through `ctx.get`, never property access: an un-injected
+   * service property throws under Cordis's inject guard, and the authoring
+   * operations need the Loader lazily (it may not be ready at construction). */
+  private loader() {
+    return this.ctx.get('loader') as {
+      entries(): IterableIterator<Entry>
+      create(options: Omit<EntryOptions, 'id'>, parent: string): Promise<string>
+      update(id: string, patch: Record<string, unknown>): Promise<void>
+      resolve(id: string): Entry
     }
   }
 

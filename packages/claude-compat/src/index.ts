@@ -99,10 +99,12 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // `/btw` side-question command (forked continuable child subagent).
   commandBtwApply(ctx, { maxQuestionBytes: config.maxQuestionBytes, provider: config.provider })
 
-  // MCP authoring Remote: mount only when the Loader is present (global + agent-preset rows).
-  if (ctx.get('loader') !== undefined) {
-    new ClaudeCompatMcp(ctx)
-  }
+  // MCP authoring Remote: register the `claudeCompatMcp` Typert service so the
+  // browser half can mount it with `ctx.remote.$mount`. The service resolves
+  // the Loader lazily inside its methods, so it must be created unconditionally
+  // (a Loader-presence guard here would skip registration when the service is
+  // not yet ready and the client would 404 on every MCP mutation).
+  new ClaudeCompatMcp(ctx)
 }
 
 
