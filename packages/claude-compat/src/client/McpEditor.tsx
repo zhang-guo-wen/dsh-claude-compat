@@ -5,7 +5,7 @@ import type {
   EditMcpRequest,
   McpSpec,
   McpTarget,
-} from '@deepseek-ai/dsh-api-remotes/client'
+} from '../types.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
 import type { McpServer } from './settings-controller.ts'
 import css from './ContextInjectionSection.module.css'
@@ -233,3 +233,4 @@ export function McpEditor({ open, mode, server, disabled, busy, error, t, onClos
     </Modal>
   )
 }
+

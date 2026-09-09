@@ -29,7 +29,7 @@ import {
   type McpAuthoringActions,
   type McpServer,
 } from './settings-controller.ts'
-import type { McpMutationResult, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpMutationResult } from '../types.ts'
 
 export type { ContextInjectionSectionProps } from './ContextInjectionSection.tsx'
 export type { ContextInjectionSectionFace, ContextInjectionSectionState, McpServer } from './settings-controller.ts'
@@ -67,9 +67,9 @@ export function apply(ctx: Context): void {
     return mapMcpServers(result.value)
   }
   const authoring: McpAuthoringActions = {
-    addMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.addMcp(request)),
-    editMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.editMcp(request)),
-    disableMcp: request => unwrapMcpMutation(ctx.remote.claudeCompatMcp.disableMcp(request)),
+    addMcp: request => unwrapMcpMutation('add', request),
+    editMcp: request => unwrapMcpMutation('edit', request),
+    disableMcp: request => unwrapMcpMutation('disable', request),
   }
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
@@ -87,3 +87,6 @@ export function apply(ctx: Context): void {
     inject: () => controller.inject(),
   }, ContextInjectionSection))
 }
+
+
+

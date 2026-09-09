@@ -24,6 +24,7 @@ import {
   type ContextInjectionConfig,
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
+import { registerMcpHttpRoute } from './mcp-http.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
@@ -103,7 +104,10 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   if (ctx.get('loader') !== undefined) {
     await ctx.plugin(ClaudeCompatMcp)
   }
+  // Plain HTTP route so the browser settings page can add/edit/disable MCP rows.
+  registerMcpHttpRoute(ctx)
 }
+
 
 
 

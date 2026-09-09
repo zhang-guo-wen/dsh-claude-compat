@@ -14,13 +14,8 @@
  * @module @deepseek-ai/dsh-client-ui-context-injection/settings-controller
  */
 
-import type {
-  AddMcpRequest,
-  DisableMcpRequest,
-  EditMcpRequest,
-  McpMutationResult,
-  PluginInventorySnapshot,
-} from '@deepseek-ai/dsh-api-remotes/client'
+import type { AddMcpRequest, DisableMcpRequest, EditMcpRequest, McpMutationResult } from '../types.ts'
+import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 
@@ -236,3 +231,6 @@ export class ContextInjectionController {
     this.store.set(this.projection())
   }
 }
+
+
+

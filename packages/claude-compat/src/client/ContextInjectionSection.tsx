@@ -14,7 +14,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { AddMcpRequest, EditMcpRequest } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AddMcpRequest, EditMcpRequest } from '../types.ts'
 import { McpEditor, type McpEditorMode, type McpEditorRequest } from './McpEditor.tsx'
 import { mcpDescriptionKey, type ContextInjectionSectionFace, type McpPhase, type McpServer } from './settings-controller.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
@@ -338,3 +338,4 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
     </div>
   )
 }
+
