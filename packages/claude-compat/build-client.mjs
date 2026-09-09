@@ -1,6 +1,6 @@
 // build-client.mjs — bundle src/client into the DSH client-loader handoff format.
 // window.__ModuleLoader__.load({ id, factory }). react + @deepseek-ai/* external.
-// CSS modules compiled with lightningcss: `.module.css` -> hashed class map + <style> inject.
+// CSS modules compiled with lightningcss; `.module.css` -> hashed class map + <style> inject.
 import { rolldown } from 'rolldown'
 import { transform } from 'lightningcss'
 import { readFile } from 'node:fs/promises'
@@ -36,9 +36,19 @@ const cssModulePlugin = {
     })
     const classMap = {}
     for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
-    const tagId = fileId.split(/[\\/]/).pop()
-    const tag = 'if(typeof document!==\'undefined\'){var t=document.querySelector(\'style[data-plugin-css="' + JSON.stringify(tagId) + '"]\');if(!t){t=document.createElement(\'style\');t.dataset.pluginCss=' + JSON.stringify(tagId) + ';t.textContent=' + JSON.stringify(code.toString()) + ';document.head.appendChild(t);}}'
-    return tag + '\nexport default ' + JSON.stringify(classMap) + ';'
+    const cssText = String(code)
+    const tagId = HANDOFF_ID + '/' + fileId.split(/[\\/]/).pop()
+    return [
+      'const css = ' + JSON.stringify(cssText) + ';',
+      'const tagId = ' + JSON.stringify(tagId) + ';',
+      "if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(tagId) + ']') === null) {",
+      "  const tag = document.createElement('style');",
+      '  tag.dataset.pluginCss = tagId;',
+      '  tag.textContent = css;',
+      '  document.head.appendChild(tag);',
+      '}',
+      'export default ' + JSON.stringify(classMap) + ';',
+    ].join('\n')
   },
 }
 
@@ -50,5 +60,3 @@ const bundle = await rolldown({
 })
 await bundle.write({ format: 'cjs', file: join(root, 'lib', 'client.js'), banner, footer, intro, sourcemap: false })
 console.log('lib/client.js written (ModuleLoader handoff bundle)')
-
-
