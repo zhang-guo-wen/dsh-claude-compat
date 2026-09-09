@@ -33,6 +33,8 @@ import {
 import { TYPERT_REMOTE, REMOTE_NAMESPACE } from '../remote.ts'
 import type {
   AddMcpRequest,
+  DescribeMcpRequest,
+  DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
   McpMutationResult,
@@ -57,6 +59,7 @@ interface ClaudeCompatMcpNamespace {
   addMcp(request: AddMcpRequest): Promise<RemoteResult<McpMutationResult>>
   editMcp(request: EditMcpRequest): Promise<RemoteResult<McpMutationResult>>
   disableMcp(request: DisableMcpRequest): Promise<RemoteResult<McpMutationResult>>
+  describeMcp(request: DescribeMcpRequest): Promise<RemoteResult<DescribeMcpResult>>
 }
 
 /** Unwrap a Typert `RemoteResult` or surface the Host failure. */
@@ -94,6 +97,7 @@ export async function apply(ctx: Context): Promise<void> {
     addMcp: request => unwrapRemote(() => mcpMgr().addMcp(request)),
     editMcp: request => unwrapRemote(() => mcpMgr().editMcp(request)),
     disableMcp: request => unwrapRemote(() => mcpMgr().disableMcp(request)),
+    describeMcp: request => unwrapRemote(() => mcpMgr().describeMcp(request)),
   }
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),

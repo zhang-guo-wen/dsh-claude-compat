@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   AddMcpRequest,
+  DescribeMcpRequest,
+  DescribeMcpResult,
   EditMcpRequest,
   McpSpec,
   McpTarget,
@@ -16,7 +18,7 @@ type Translate = (key: ContextInjectionSectionKey) => string
 /** Whether the editor is creating a row or replacing one. */
 export type McpEditorMode = 'add' | 'edit'
 
-/** Request emitted by the MCP editor after form validation. */
+/** Request emitted by the MCP editor after JSON parsing and validation. */
 export type McpEditorRequest = AddMcpRequest | EditMcpRequest
 
 interface McpEditorProps {
@@ -26,141 +28,126 @@ interface McpEditorProps {
   readonly disabled: boolean
   readonly busy: boolean
   readonly error: string | null
+  readonly describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
   readonly t: Translate
   readonly onClose: () => void
   readonly onSubmit: (request: McpEditorRequest) => void
 }
 
-type Transport = McpSpec['type']
+type AnyRecord = Record<string, unknown>
 
-type Draft = {
-  targetScope: 'global' | 'preset'
-  agentPreset: string
-  entryId: string
-  serverName: string
-  transport: Transport
-  command: string
-  url: string
-  args: string
-  env: string
-  headers: string
-  cwd: string
-}
-
-function draftFor(mode: McpEditorMode, server: McpServer | undefined): Draft {
-  return {
-    targetScope: server?.scope ?? 'global',
-    agentPreset: server?.presetId ?? '',
-    entryId: mode === 'edit' ? server?.entryId ?? '' : '',
-    serverName: server?.serverName ?? '',
-    transport: 'stdio',
-    command: '',
-    url: '',
-    args: '',
-    env: '',
-    headers: '',
-    cwd: '',
-  }
-}
-
-function lines(value: string): readonly string[] | undefined {
-  const result = value.split('\n').map(line => line.trim()).filter(Boolean)
-  return result.length === 0 ? undefined : result
-}
-
-function keyValues(value: string, invalidMessage: string): Readonly<Record<string, string>> | undefined {
-  const result: Record<string, string> = {}
-  for (const line of value.split('\n').map(line => line.trim()).filter(Boolean)) {
-    const separator = line.indexOf('=')
-    if (separator <= 0) throw new Error(invalidMessage)
-    const key = line.slice(0, separator).trim()
-    if (key === '') throw new Error(invalidMessage)
-    result[key] = line.slice(separator + 1).trim()
-  }
-  return Object.keys(result).length === 0 ? undefined : result
-}
-
-function targetFor(draft: Draft): McpTarget {
-  return draft.targetScope === 'global'
+/** Build the composition target for a row, or the default global target. */
+function targetForServer(server: McpServer | undefined): McpTarget {
+  if (server === undefined) return { scope: 'global' }
+  return server.scope === 'global'
     ? { scope: 'global' }
-    : { scope: 'preset', agentPreset: draft.agentPreset.trim() }
+    : { scope: 'preset', agentPreset: server.presetId ?? '' }
 }
 
-function specFor(draft: Draft, invalidMessage: string): McpSpec {
-  if (draft.transport === 'stdio') {
-    const command = draft.command.trim()
-    if (command === '') throw new Error(invalidMessage)
-    const args = lines(draft.args)
-    const env = keyValues(draft.env, invalidMessage)
-    return {
-      type: 'stdio',
-      command,
-      ...(args === undefined ? {} : { args }),
-      ...(env === undefined ? {} : { env }),
-      ...draft.cwd.trim() === '' ? {} : { cwd: draft.cwd.trim() },
-    }
+/**
+ * Serialize the editable request to pretty-printed JSON for the editor box.
+ * Edit mode prefers the Host-described spec (the inventory does not carry the
+ * connection config); a describe failure falls back to the row identity.
+ */
+function requestJson(mode: McpEditorMode, server: McpServer | undefined, describe: DescribeMcpResult | undefined): string {
+  if (mode === 'edit') {
+    const request: AnyRecord = describe === undefined
+      ? { target: targetForServer(server), entryId: server?.entryId ?? '', serverName: server?.serverName ?? '' }
+      : { target: describe.target, entryId: describe.entryId, serverName: describe.serverName, spec: describe.spec }
+    return JSON.stringify(request, null, 2)
   }
-  const url = draft.url.trim()
-  if (url === '') throw new Error(invalidMessage)
-  const headers = keyValues(draft.headers, invalidMessage)
-  return {
-    type: draft.transport,
-    url,
-    ...(headers === undefined ? {} : { headers }),
+  return JSON.stringify({
+    target: { scope: 'global' },
+    serverName: '',
+    spec: { type: 'stdio', command: '', args: [], env: {} },
+  }, null, 2)
+}
+
+/** Parse and validate the editor JSON into the request consumed by the host. */
+function parseRequest(text: string, mode: McpEditorMode, invalid: string): McpEditorRequest {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error(invalid)
   }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
+  const request = value as AnyRecord
+
+  const serverName = request.serverName
+  if (typeof serverName !== 'string' || serverName.trim() === '') throw new Error(invalid)
+
+  const target = request.target as AnyRecord | undefined
+  if (target === undefined || typeof target !== 'object') throw new Error(invalid)
+  const scope = target.scope
+  if (scope !== 'global' && scope !== 'preset') throw new Error(invalid)
+  if (scope === 'preset') {
+    const agentPreset = target.agentPreset
+    if (typeof agentPreset !== 'string' || agentPreset.trim() === '') throw new Error(invalid)
+  }
+
+  const spec = request.spec as AnyRecord | undefined
+  if (spec === undefined || typeof spec !== 'object') throw new Error(invalid)
+  const type = spec.type
+  if (type === 'stdio') {
+    if (typeof spec.command !== 'string' || spec.command.trim() === '') throw new Error(invalid)
+  } else if (type === 'streamable-http' || type === 'http' || type === 'sse') {
+    if (typeof spec.url !== 'string' || spec.url.trim() === '') throw new Error(invalid)
+  } else {
+    throw new Error(invalid)
+  }
+
+  if (mode === 'edit' && (typeof request.entryId !== 'string' || request.entryId.trim() === '')) {
+    throw new Error(invalid)
+  }
+
+  const parsedTarget: McpTarget = scope === 'global'
+    ? { scope: 'global' }
+    : { scope: 'preset', agentPreset: String(target.agentPreset).trim() }
+  const entryId = typeof request.entryId === 'string' ? request.entryId.trim() : undefined
+  const result: McpEditorRequest = {
+    target: parsedTarget,
+    serverName: serverName.trim(),
+    spec: spec as McpSpec,
+    ...(entryId === undefined ? {} : { entryId }),
+  } as McpEditorRequest
+  return result
 }
 
-function field(label: string, input: ReactNode): ReactNode {
-  return (
-    <label className={css.formField}>
-      <span className={css.formLabel}>{label}</span>
-      {input}
-    </label>
-  )
-}
-
-/** Modal form for adding or replacing one MCP connection row. */
-export function McpEditor({ open, mode, server, disabled, busy, error, t, onClose, onSubmit }: McpEditorProps): ReactNode {
-  const [draft, setDraft] = useState<Draft>(() => draftFor(mode, server))
+/** Modal editor: one JSON textbox, filled and parsed on save. */
+export function McpEditor({ open, mode, server, disabled, busy, error, describeMcp, t, onClose, onSubmit }: McpEditorProps): ReactNode {
+  const [json, setJson] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const editKey = `${server?.scope ?? ''}:${server?.presetId ?? ''}:${server?.entryId ?? ''}`
 
   useEffect(() => {
     if (!open) return
-    setDraft(draftFor(mode, server))
+    let current = true
     setLocalError(null)
+    if (mode === 'edit' && server?.entryId) {
+      setLoading(true)
+      const target = targetForServer(server)
+      void describeMcp({ target, entryId: server.entryId }).then(
+        (described) => { if (current) { setJson(requestJson(mode, server, described)); setLoading(false) } },
+        () => { if (current) { setJson(requestJson(mode, server)); setLoading(false) } },
+      )
+    } else {
+      setJson(requestJson(mode, server))
+    }
+    return () => { current = false }
   }, [editKey, mode, open, server, t])
-
-  const update = (key: keyof Draft, value: string): void => {
-    setDraft(previous => ({ ...previous, [key]: value }))
-    setLocalError(null)
-  }
 
   const submit = (): void => {
     try {
-      const serverName = draft.serverName.trim()
-      if (serverName === '') throw new Error(t('mcp.form.required'))
-      const target = targetFor(draft)
-      if (target.scope === 'preset' && target.agentPreset === '') throw new Error(t('mcp.form.required'))
-      const spec = specFor(draft, t('mcp.form.invalidKeyValue'))
-      if (mode === 'edit') {
-        if (draft.entryId === '') throw new Error(t('mcp.form.required'))
-        onSubmit({ target, entryId: draft.entryId, serverName, spec })
-      } else {
-        onSubmit({
-          target,
-          ...draft.entryId.trim() === '' ? {} : { entryId: draft.entryId.trim() },
-          serverName,
-          spec,
-        })
-      }
+      onSubmit(parseRequest(json, mode, t('mcp.form.jsonInvalid')))
     } catch (cause) {
-      setLocalError(cause instanceof Error ? cause.message : t('mcp.form.required'))
+      setLocalError(cause instanceof Error ? cause.message : t('mcp.form.jsonInvalid'))
     }
   }
 
-  const title = mode === 'add' ? t('mcp.form.addTitle') : t('mcp.form.editTitle')
   const formDisabled = disabled || busy
+  const title = mode === 'add' ? t('mcp.form.addTitle') : t('mcp.form.editTitle')
   return (
     <Modal
       open={open}
@@ -179,58 +166,21 @@ export function McpEditor({ open, mode, server, disabled, busy, error, t, onClos
       )}
     >
       <div className={css.mcpForm}>
-        {mode === 'add' ? field(t('mcp.form.scope'), (
-          <select
-            className={css.formSelect}
-            value={draft.targetScope}
+        <label className={css.formField}>
+          <span className={css.formLabel}>{t('mcp.form.json')}</span>
+          <textarea
+            className={css.formJson}
+            value={json}
             disabled={formDisabled}
-            aria-label={t('mcp.form.scope')}
-            onChange={(event) => { update('targetScope', event.currentTarget.value) }}
-          >
-            <option value="global">{t('mcp.scopeGlobal')}</option>
-            <option value="preset">{t('mcp.scopePreset')}</option>
-          </select>
-        )) : null}
-        {draft.targetScope === 'preset' ? field(t('mcp.form.preset'), (
-          <Input value={draft.agentPreset} disabled={formDisabled || mode === 'edit'} aria-label={t('mcp.form.preset')} onChange={(event) => { update('agentPreset', event.currentTarget.value) }} />
-        )) : null}
-        {field(t('mcp.form.entryId'), (
-          <Input value={draft.entryId} disabled={formDisabled || mode === 'edit'} placeholder={t('mcp.form.entryIdPlaceholder')} aria-label={t('mcp.form.entryId')} onChange={(event) => { update('entryId', event.currentTarget.value) }} />
-        ))}
-        {field(t('mcp.form.serverName'), (
-          <Input value={draft.serverName} disabled={formDisabled} aria-label={t('mcp.form.serverName')} onChange={(event) => { update('serverName', event.currentTarget.value) }} />
-        ))}
-        {field(t('mcp.form.transport'), (
-          <select
-            className={css.formSelect}
-            value={draft.transport}
-            disabled={formDisabled}
-            aria-label={t('mcp.form.transport')}
-            onChange={(event) => { update('transport', event.currentTarget.value) }}
-          >
-            <option value="stdio">{t('mcp.form.stdio')}</option>
-            <option value="streamable-http">{t('mcp.form.streamableHttp')}</option>
-            <option value="http">{t('mcp.form.http')}</option>
-            <option value="sse">{t('mcp.form.sse')}</option>
-          </select>
-        ))}
-        {draft.transport === 'stdio' ? (
-          <>
-            {field(t('mcp.form.command'), <Input value={draft.command} disabled={formDisabled} aria-label={t('mcp.form.command')} onChange={(event) => { update('command', event.currentTarget.value) }} />)}
-            {field(t('mcp.form.args'), <textarea className={css.formTextarea} value={draft.args} disabled={formDisabled} placeholder={t('mcp.form.argsPlaceholder')} aria-label={t('mcp.form.args')} onChange={(event) => { update('args', event.currentTarget.value) }} />)}
-            {field(t('mcp.form.env'), <textarea className={css.formTextarea} value={draft.env} disabled={formDisabled} placeholder={t('mcp.form.keyValuePlaceholder')} aria-label={t('mcp.form.env')} onChange={(event) => { update('env', event.currentTarget.value) }} />)}
-            {field(t('mcp.form.cwd'), <Input value={draft.cwd} disabled={formDisabled} aria-label={t('mcp.form.cwd')} onChange={(event) => { update('cwd', event.currentTarget.value) }} />)}
-          </>
-        ) : (
-          <>
-            {field(t('mcp.form.url'), <Input value={draft.url} disabled={formDisabled} aria-label={t('mcp.form.url')} onChange={(event) => { update('url', event.currentTarget.value) }} />)}
-            {field(t('mcp.form.headers'), <textarea className={css.formTextarea} value={draft.headers} disabled={formDisabled} placeholder={t('mcp.form.keyValuePlaceholder')} aria-label={t('mcp.form.headers')} onChange={(event) => { update('headers', event.currentTarget.value) }} />)}
-          </>
-        )}
+            spellCheck={false}
+            aria-label={t('mcp.form.json')}
+            onChange={(event) => { setJson(event.currentTarget.value); setLocalError(null) }}
+          />
+        </label>
+        {loading ? <p className={css.mcpStatus}>{t('mcp.loading')}</p> : null}
         {localError !== null ? <p className={css.formError} role="alert">{localError}</p> : null}
         {error !== null ? <p className={css.formError} role="alert">{error}</p> : null}
       </div>
     </Modal>
   )
 }
-

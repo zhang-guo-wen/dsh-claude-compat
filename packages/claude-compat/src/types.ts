@@ -62,6 +62,28 @@ export interface DisableMcpRequest {
   readonly disabled: boolean
 }
 
+/** Request to read one MCP client row's current connection spec. */
+export interface DescribeMcpRequest {
+  /** Composition containing the row. */
+  readonly target: McpTarget
+  /** Loader row id, or the preset row id. */
+  readonly entryId: string
+}
+
+/** Current connection spec and identity of one MCP client row. */
+export interface DescribeMcpResult {
+  /** Composition that owns the row. */
+  readonly target: McpTarget
+  /** Address of the row in the source composition. */
+  readonly entryId: string
+  /** MCP namespace shown in tool names. */
+  readonly serverName: string
+  /** Claude-compatible transport specification. */
+  readonly spec: McpSpec
+  /** Whether the row is disabled in its source composition. */
+  readonly disabled: boolean
+}
+
 /** Redacted result returned after an MCP row mutation. */
 export interface McpMutationResult {
   /** Composition that was changed. */

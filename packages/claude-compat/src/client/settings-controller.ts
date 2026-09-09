@@ -14,7 +14,14 @@
  * @module @deepseek-ai/dsh-client-ui-context-injection/settings-controller
  */
 
-import type { AddMcpRequest, DisableMcpRequest, EditMcpRequest, McpMutationResult } from '../types.ts'
+import type {
+  AddMcpRequest,
+  DescribeMcpRequest,
+  DescribeMcpResult,
+  DisableMcpRequest,
+  EditMcpRequest,
+  McpMutationResult,
+} from '../types.ts'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -79,6 +86,8 @@ export interface McpAuthoringActions {
   editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
   /** Set one MCP row's disabled flag and resolve after the Host commits it. */
   disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
+  /** Read one MCP row's current connection spec for the editor to prefill. */
+  describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
 }
 
 /** Snapshot the section renders. */
@@ -112,6 +121,8 @@ export interface ContextInjectionSectionFace {
   editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
   /** Enable or disable one MCP row through the Claude-compatible Host Remote. */
   disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
+  /** Read one MCP row's connection spec through the Claude-compatible Host Remote. */
+  describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
   /** Resolve the current loaded MCP roster from the Host plugin inventory. */
   mcps: () => Promise<readonly McpServer[]>
 }
@@ -187,6 +198,7 @@ export class ContextInjectionController {
       addMcp: this.authoring.addMcp,
       editMcp: this.authoring.editMcp,
       disableMcp: this.authoring.disableMcp,
+      describeMcp: this.authoring.describeMcp,
       mcps: this.mcps,
     }
   }

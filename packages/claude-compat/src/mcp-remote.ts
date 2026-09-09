@@ -11,13 +11,16 @@ import {
   findEntryRows,
   MCP_CLIENT_MODULE,
   presetLeafId,
+  readEntryRows,
   type PresetFile,
   writeEntryListFile,
   writePresetComposition,
 } from './mcp-authoring.ts'
-import { assertServerName, mcpEntryConfig } from './mcp-config.ts'
+import { assertServerName, mcpEntryConfig, specFromEntryConfig, type McpEntryConfig } from './mcp-config.ts'
 import type {
   AddMcpRequest,
+  DescribeMcpRequest,
+  DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
   McpMutationResult,
@@ -93,6 +96,50 @@ export class ClaudeCompatMcp extends TypertRemoteService {
   @Remote('disableMcp')
   async disableMcp(request: DisableMcpRequest): Promise<McpMutationResult> {
     return this.enqueue(() => this.disable(request))
+  }
+
+  /**
+   * Read one MCP client row's current connection spec.
+   * @param request - target row identity.
+   * @returns the row's identity and connection spec for the editor to prefill.
+   * @throws a typed MCP error when the target is unavailable, read-only,
+   * malformed, or not an MCP composition row.
+   */
+  @Remote('describeMcp')
+  async describeMcp(request: DescribeMcpRequest): Promise<DescribeMcpResult> {
+    const target = validateTarget(request.target)
+    validateEntryId(request.entryId, target, false)
+    if (target.scope === 'global') {
+      const include = await this.globalInclude(target)
+      const entry = this.globalMcpEntry(request.entryId, target, include.tree)
+      const serverName = serverNameOf(entry.options)
+      if (serverName === undefined) {
+        throw invalid(target, 'the MCP row has no valid serverName')
+      }
+      return {
+        target,
+        entryId: entry.id,
+        serverName,
+        spec: specFromEntryConfig(entry.options.config as McpEntryConfig),
+        disabled: entry.disabled ?? false,
+      }
+    }
+
+    const preset = await this.resolvePreset(target)
+    const entryId = presetLeafId(request.entryId)
+    const rows = await readEntryRows(preset.path)
+    const row = this.presetMcpRow(rows, entryId, target)
+    const serverName = serverNameOf(row) ?? entryId
+    if (row.config === undefined || typeof row.config !== 'object' || row.config === null) {
+      throw invalid(target, `preset row "${entryId}" has no connection config`)
+    }
+    return {
+      target,
+      entryId,
+      serverName,
+      spec: specFromEntryConfig(row.config as McpEntryConfig),
+      disabled: row.disabled === true,
+    }
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {

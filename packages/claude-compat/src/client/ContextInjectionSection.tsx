@@ -128,7 +128,7 @@ function McpRow({ server, description, onEditDescription, onEdit, onToggleDisabl
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
   const {
     useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription,
-    addMcp, editMcp, disableMcp, mcps,
+    addMcp, editMcp, disableMcp, describeMcp, mcps,
   } = props
   const state = useContextInjection(snapshot => snapshot)
   const [activeTab, setActiveTab] = useState<TabId>('prompt')
@@ -329,6 +329,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
             disabled={false}
             busy={editorBusy}
             error={editorError}
+            describeMcp={describeMcp}
             t={t}
             onClose={closeEditor}
             onSubmit={(request) => { void submitEditor(request) }}

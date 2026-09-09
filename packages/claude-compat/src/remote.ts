@@ -52,5 +52,10 @@ function descriptor(method: string): InvocationDescriptor {
 /** Contribution mounted by the browser half to reach the MCP authoring owner. */
 export const TYPERT_REMOTE: TypertRemoteContribution = {
   package: '@zhang-guo-wen/dsh-claude-compat',
-  descriptors: [descriptor('addMcp'), descriptor('editMcp'), descriptor('disableMcp')],
+  descriptors: [
+    descriptor('addMcp'),
+    descriptor('editMcp'),
+    descriptor('disableMcp'),
+    descriptor('describeMcp'),
+  ],
 }

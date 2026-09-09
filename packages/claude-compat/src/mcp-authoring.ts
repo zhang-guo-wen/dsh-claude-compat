@@ -183,6 +183,29 @@ export async function writePresetComposition(
 }
 
 /**
+ * Read and validate one entry-list composition file, returning its rows.
+ * Used by the read-only describe path; the write helpers (entry-list and preset
+ * composition) keep their own locked/full validation.
+ * @param filename - YAML or JSON entry-list path.
+ * @returns the parsed entry rows.
+ * @throws when the file cannot be read or is not a valid entry list.
+ */
+export async function readEntryRows(filename: string): Promise<EntryOptions[]> {
+  let parsed: unknown
+  try {
+    parsed = load(await readFile(filename, 'utf8'), { schema: entryListSchema })
+  } catch (cause) {
+    const reason = String(cause)
+    throw new RemoteError('mcp/invalid', 'MCP entry-list file could not be read', { reason }, { cause })
+  }
+  const problem = entryListProblem(parsed)
+  if (problem !== undefined) {
+    throw new RemoteError('mcp/invalid', 'MCP entry-list file is not valid', { reason: problem })
+  }
+  return parsed as EntryOptions[]
+}
+
+/**
  * Return a stable leaf id for a mounted preset row address.
  * @param entryId - local or loader-qualified row id.
  * @returns the row id used in the preset composition file.
