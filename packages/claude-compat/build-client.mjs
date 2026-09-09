@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = dirname(fileURLToPath(import.meta.url))
-const HANDOFF_ID = '@zhang-guo-wen/dsh-client-ui-context-injection'
+const HANDOFF_ID = '@zhang-guo-wen/dsh-claude-compat'
 const VIRT = '\0dsh-css:'
 const SUFFIX = '.mjs'
 
@@ -50,4 +50,5 @@ const bundle = await rolldown({
 })
 await bundle.write({ format: 'cjs', file: join(root, 'lib', 'client.js'), banner, footer, intro, sourcemap: false })
 console.log('lib/client.js written (ModuleLoader handoff bundle)')
+
 
