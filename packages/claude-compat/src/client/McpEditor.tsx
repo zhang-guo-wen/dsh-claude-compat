@@ -44,27 +44,116 @@ function targetForServer(server: McpServer | undefined): McpTarget {
     : { scope: 'preset', agentPreset: server.presetId ?? '' }
 }
 
-/**
- * Serialize the editable request to pretty-printed JSON for the editor box.
- * Edit mode prefers the Host-described spec (the inventory does not carry the
- * connection config); a describe failure falls back to the row identity.
- */
+/** Flatten a spec into a Claude-shaped object (spec fields at the top level). */
+function flattenSpec(spec: McpSpec): AnyRecord {
+  if (spec.type === 'stdio') {
+    return {
+      type: 'stdio',
+      command: spec.command,
+      ...(spec.args === undefined ? {} : { args: spec.args }),
+      ...(spec.env === undefined ? {} : { env: spec.env }),
+      ...(spec.cwd === undefined ? {} : { cwd: spec.cwd }),
+    }
+  }
+  return {
+    type: spec.type,
+    url: spec.url,
+    ...(spec.headers === undefined ? {} : { headers: spec.headers }),
+  }
+}
+
+/** Serialize the editable config to pretty-printed Claude-shaped JSON. */
 function requestJson(mode: McpEditorMode, server: McpServer | undefined, describe: DescribeMcpResult | undefined): string {
   if (mode === 'edit') {
-    const request: AnyRecord = describe === undefined
+    const base: AnyRecord = describe === undefined
       ? { target: targetForServer(server), entryId: server?.entryId ?? '', serverName: server?.serverName ?? '' }
-      : { target: describe.target, entryId: describe.entryId, serverName: describe.serverName, spec: describe.spec }
-    return JSON.stringify(request, null, 2)
+      : { target: describe.target, entryId: describe.entryId, serverName: describe.serverName, ...flattenSpec(describe.spec) }
+    return JSON.stringify(base, null, 2)
   }
   return JSON.stringify({
     target: { scope: 'global' },
     serverName: '',
-    spec: { type: 'stdio', command: '', args: [], env: {} },
+    type: 'stdio',
+    command: '',
+    args: [],
+    env: {},
   }, null, 2)
 }
 
-/** Parse and validate the editor JSON into the request consumed by the host. */
-function parseRequest(text: string, mode: McpEditorMode, invalid: string): McpEditorRequest {
+/** Derive a serverName from the command/args when the JSON omits one. */
+function deriveServerName(spec: AnyRecord, fallback: string): string {
+  const candidates = [
+    ...(Array.isArray(spec.args) ? [...spec.args].reverse().map(String) : []),
+    typeof spec.command === 'string' ? spec.command : '',
+  ].filter(Boolean)
+  for (const candidate of candidates) {
+    if (candidate.includes('@') && candidate.includes('/')) {
+      const name = candidate.split('/').pop() ?? ''
+      return sanitizeName(name) || fallback
+    }
+    const name = sanitizeName(candidate)
+    if (name !== '') return name
+  }
+  return fallback
+}
+
+function sanitizeName(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, '_').replace(/^_+|_+$/g, '').slice(0, 32)
+}
+
+/** Read a spec from the object: either a nested `spec` or the flat fields. */
+function specOf(value: AnyRecord, invalid: string): McpSpec | undefined {
+  const candidate = (value.spec ?? value) as AnyRecord
+  const type = candidate.type
+  if (type === 'stdio') {
+    const command = candidate.command
+    if (typeof command !== 'string' || command.trim() === '') throw new Error(invalid)
+    const args = Array.isArray(candidate.args) ? candidate.args.map(String) : undefined
+    const env = candidate.env !== null && typeof candidate.env === 'object' && !Array.isArray(candidate.env)
+      ? Object.fromEntries(Object.entries(candidate.env as AnyRecord).map(([k, v]) => [k, String(v)]))
+      : undefined
+    const cwd = typeof candidate.cwd === 'string' ? candidate.cwd : undefined
+    return {
+      type: 'stdio',
+      command,
+      ...(args === undefined ? {} : { args }),
+      ...(env === undefined ? {} : { env }),
+      ...(cwd === undefined ? {} : { cwd }),
+    }
+  }
+  if (type === 'streamable-http' || type === 'http' || type === 'sse') {
+    const url = candidate.url
+    if (typeof url !== 'string' || url.trim() === '') throw new Error(invalid)
+    const headers = candidate.headers !== null && typeof candidate.headers === 'object' && !Array.isArray(candidate.headers)
+      ? Object.fromEntries(Object.entries(candidate.headers as AnyRecord).map(([k, v]) => [k, String(v)]))
+      : undefined
+    return { type, url, ...(headers === undefined ? {} : { headers }) }
+  }
+  return undefined
+}
+
+function targetOf(value: AnyRecord, mode: McpEditorMode, server: McpServer | undefined, invalid: string): McpTarget {
+  const raw = value.target as AnyRecord | undefined
+  if (raw !== undefined && typeof raw === 'object') {
+    const scope = raw.scope
+    if (scope === 'global') return { scope: 'global' }
+    if (scope === 'preset') {
+      const agentPreset = raw.agentPreset
+      if (typeof agentPreset === 'string' && agentPreset.trim() !== '') {
+        return { scope: 'preset', agentPreset: agentPreset.trim() }
+      }
+    }
+    throw new Error(invalid)
+  }
+  return mode === 'edit' ? targetForServer(server) : { scope: 'global' }
+}
+
+/**
+ * Parse the editor JSON into the request consumed by the host. Accepts the
+ * canonical request, a Claude `mcpServers` map, a flattened `serverName`+spec,
+ * or a bare spec (deriving the serverName and defaulting the target).
+ */
+function parseRequest(text: string, mode: McpEditorMode, server: McpServer | undefined, invalid: string): McpEditorRequest {
   let value: unknown
   try {
     value = JSON.parse(text)
@@ -72,43 +161,35 @@ function parseRequest(text: string, mode: McpEditorMode, invalid: string): McpEd
     throw new Error(invalid)
   }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
-  const request = value as AnyRecord
+  const root = value as AnyRecord
 
-  const serverName = request.serverName
-  if (typeof serverName !== 'string' || serverName.trim() === '') throw new Error(invalid)
-
-  const target = request.target as AnyRecord | undefined
-  if (target === undefined || typeof target !== 'object') throw new Error(invalid)
-  const scope = target.scope
-  if (scope !== 'global' && scope !== 'preset') throw new Error(invalid)
-  if (scope === 'preset') {
-    const agentPreset = target.agentPreset
-    if (typeof agentPreset !== 'string' || agentPreset.trim() === '') throw new Error(invalid)
+  // Claude `mcpServers` map: unwrap to its single entry.
+  let entry: AnyRecord = root
+  if (root.mcpServers !== null && typeof root.mcpServers === 'object' && !Array.isArray(root.mcpServers)) {
+    const pairs = Object.entries(root.mcpServers as AnyRecord)
+    if (pairs.length !== 1) throw new Error(invalid)
+    const [containerName, containerSpec] = pairs[0] as [string, unknown]
+    if (containerSpec === null || typeof containerSpec !== 'object') throw new Error(invalid)
+    entry = { ...(containerSpec as AnyRecord), serverName: containerName }
   }
 
-  const spec = request.spec as AnyRecord | undefined
-  if (spec === undefined || typeof spec !== 'object') throw new Error(invalid)
-  const type = spec.type
-  if (type === 'stdio') {
-    if (typeof spec.command !== 'string' || spec.command.trim() === '') throw new Error(invalid)
-  } else if (type === 'streamable-http' || type === 'http' || type === 'sse') {
-    if (typeof spec.url !== 'string' || spec.url.trim() === '') throw new Error(invalid)
-  } else {
-    throw new Error(invalid)
-  }
+  const spec = specOf(entry, invalid)
+  if (spec === undefined) throw new Error(invalid)
+  const serverName = typeof entry.serverName === 'string' && entry.serverName.trim() !== ''
+    ? entry.serverName.trim()
+    : deriveServerName(entry, sanitizeName(spec.type === 'stdio' ? spec.command : spec.url))
+  if (serverName === '') throw new Error(invalid)
 
-  if (mode === 'edit' && (typeof request.entryId !== 'string' || request.entryId.trim() === '')) {
-    throw new Error(invalid)
-  }
+  const target = targetOf(entry, mode, server, invalid)
+  const entryId = typeof entry.entryId === 'string' && entry.entryId.trim() !== ''
+    ? entry.entryId.trim()
+    : mode === 'edit' ? server?.entryId ?? '' : undefined
+  if (mode === 'edit' && (entryId === undefined || entryId === '')) throw new Error(invalid)
 
-  const parsedTarget: McpTarget = scope === 'global'
-    ? { scope: 'global' }
-    : { scope: 'preset', agentPreset: String(target.agentPreset).trim() }
-  const entryId = typeof request.entryId === 'string' ? request.entryId.trim() : undefined
   const result: McpEditorRequest = {
-    target: parsedTarget,
-    serverName: serverName.trim(),
-    spec: spec as McpSpec,
+    target,
+    serverName,
+    spec,
     ...(entryId === undefined ? {} : { entryId }),
   } as McpEditorRequest
   return result
@@ -140,7 +221,7 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
 
   const submit = (): void => {
     try {
-      onSubmit(parseRequest(json, mode, t('mcp.form.jsonInvalid')))
+      onSubmit(parseRequest(json, mode, server, t('mcp.form.jsonInvalid')))
     } catch (cause) {
       setLocalError(cause instanceof Error ? cause.message : t('mcp.form.jsonInvalid'))
     }
