@@ -191,6 +191,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
         throw conflict(target, entryId, request.serverName, 'the serverName is already in use')
       }
     }, this.warnPatch)
+    await this.refreshPreset(preset.id)
     return { target, entryId, serverName: request.serverName, disabled: false }
   }
 
@@ -223,6 +224,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       disabled = row.disabled === true
       this.assertServerNameAvailable(rows, entryId, request.serverName, target)
     }, this.warnPatch)
+    await this.refreshPreset(preset.id)
     return { target, entryId, serverName: request.serverName, disabled }
   }
 
@@ -253,6 +255,7 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       const row = this.presetMcpRow(rows, entryId, target)
       serverName = serverNameOf(row) ?? entryId
     }, this.warnPatch)
+    await this.refreshPreset(preset.id)
     return { target, entryId, serverName, disabled: request.disabled }
   }
 
@@ -270,6 +273,23 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       throw new RemoteError('mcp/not-found', `MCP preset "${target.agentPreset}" was not found`, {
         target,
       }, { cause })
+    }
+  }
+
+  /**
+   * Recompose one preset's standing mount so a just-written composition file is
+   * live without a restart. `agentPresets.standingKeyFor` re-stamps the mount
+   * and starts a new generation when the file's mtime/size changed. A failure
+   * is logged rather than thrown so a committed file write still reports success.
+   * @param agentPreset - preset id whose composition was just written.
+   */
+  private async refreshPreset(agentPreset: string): Promise<void> {
+    const presets = this.ctx.get('agentPresets') as { standingKeyFor(id?: string): Promise<unknown> } | undefined
+    if (presets === undefined) return
+    try {
+      await presets.standingKeyFor(agentPreset)
+    } catch (error) {
+      this.warnPatch(`claude-compat: preset "${agentPreset}" recompose failed after edit: ${String(error)}`)
     }
   }
 
