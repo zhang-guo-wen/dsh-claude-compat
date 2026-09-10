@@ -40,17 +40,21 @@ The built `lib/` is committed, so the repository installs and runs directly — 
 
 ### From the git repository (recommended)
 
+Install a **release tag** (`v0.1.1-alpha.1`) rather than the default branch, so a later
+work-in-progress commit on `master` is not picked up:
+
 ```sh
 # over HTTPS (public repo)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
 
 # or over SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
 ```
 
-`#path:packages/claude-compat` selects the plugin package inside the repository (pnpm's
-subdirectory git spec). Re-run the same command to update, or append `#<commit-or-tag>` after the
-path to pin a revision.
+The spec has two parts: `#<ref>` pins a **tag / commit / branch**, and
+`&path:packages/claude-compat` selects the plugin package inside the repository (pnpm's
+subdirectory git spec). Omit the `#<ref>&` part to follow the default branch (not recommended);
+re-run the command with a newer tag to update.
 
 ### From a local checkout
 

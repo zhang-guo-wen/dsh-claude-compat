@@ -85,6 +85,28 @@ await mount?.tree.refresh?.()
 **注意:`file:` 依赖在 profile 里可能是物理拷贝而非 junction** —— 那时改源码/重建**不会**影响正在跑的 dsh。
 要么重装依赖建成 junction,要么手动把新 `lib/` 同步进 profile。client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
 
+## 发版(Release)
+
+`lib/` 是提交进仓库的,所以**发版 = 改版本号 + 构建 + 提交产物 + 打 tag**。别人按 tag 安装,
+`master` 上的临时提交不会被他们拿到。
+
+1. 改 `packages/claude-compat/package.json` 的 `version`。
+2. `npm run build`,确认 `lib/index.mjs` 与 `lib/client.js` 是最新。
+3. 提交源码与 `lib/`(不要把 `lib/` 落在外面的工作区)。
+4. 打带注释的 tag 并推送:
+
+   ```sh
+   git tag -a v<version> -m "dsh-claude-compat <version>"
+   git push origin master --follow-tags
+   ```
+
+5. 验证安装(子目录 + tag 组合,两步用 `&` 相连):
+
+   ```sh
+   npx @deepseek-ai/dsh plugin --profile web add \
+     "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v<version>&path:packages/claude-compat"
+   ```
+
 ## 易崩清单
 
 1. `@Remote` 装饰器没在构建期降级 → host 加载崩(Node 不解析装饰器)。

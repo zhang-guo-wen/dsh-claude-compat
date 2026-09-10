@@ -38,16 +38,18 @@ Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 �
 
 ### 从 git 仓库安装(推荐)
 
+装**发布 tag**(如 `v0.1.1-alpha.1`),而不是默认分支 —— 这样你之后往 `master` 推的**临时提交不会被人拿到**:
+
 ```sh
 # HTTPS(公开仓库)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
 
 # 或 SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
 ```
 
-`#path:packages/claude-compat` 指定仓库内的插件包(pnpm 的子目录 git 写法)。**再次执行同一条命令即为更新**;
-在 path 之后追加 `#<commit 或 tag>` 可锁定版本。
+写法分两段:`#<ref>` 锁定 **tag / commit / 分支**,`&path:packages/claude-compat` 指定仓库内的插件包
+(pnpm 的子目录 git 写法)。去掉 `#<ref>&` 就会跟随默认分支(不推荐);换新 tag 重跑即可升级。
 
 ### 从本地 checkout 安装
 
