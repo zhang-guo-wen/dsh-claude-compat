@@ -7,7 +7,8 @@
 ## 目录
 
 - `packages/claude-compat/src/` —— host 入口 `index.ts`;浏览器半边在 `src/client/`。
-- `packages/claude-compat/lib/` —— 构建产物(gitignored):`index.mjs`(host)+ `client.js`(浏览器 handoff)。
+- `packages/claude-compat/lib/` —— 构建产物:**已提交进仓库**(`index.mjs` host + `client.js` 浏览器 handoff),
+  这样别人可以直接从 git 安装。改完源码**记得 `npm run build` 并把 `lib/` 一起提交**。
 - `packages/claude-compat/cordis.patch.yml` —— 把插件行插入组合的 bundle 层。
 - `packages/claude-compat/src/remote.ts` —— 手写的客户端 `TYPERT_REMOTE` 贡献对象。
 
