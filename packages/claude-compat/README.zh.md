@@ -3,9 +3,11 @@ description: "DeepSeek Harness 的 Claude Code 兼容：发现 .claude/skills �
 kind: "package-reference"
 ---
 
-# @deepseek-ai/dsh-claude-compat
+# @zhang-guo-wen/dsh-claude-compat
 
 [English](README.md) | 中文
+
+> 包参考文档。插件"有什么用"与截图见[仓库 README](../../README.zh.md)。
 
 ## 概要
 

@@ -3,9 +3,12 @@ description: "Claude Code compatibility for the DeepSeek Harness: discover .clau
 kind: "package-reference"
 ---
 
-# @deepseek-ai/dsh-claude-compat
+# @zhang-guo-wen/dsh-claude-compat
 
 English | [中文](README.zh.md)
+
+> Package reference. For what this plugin does and screenshots, see the
+> [repository README](../../README.md).
 
 ## Summary
 
