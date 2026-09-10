@@ -28,6 +28,7 @@ import {
   mapMcpServers,
   type ContextInjectionFlags,
   type McpAuthoringActions,
+  type McpPresetOption,
   type McpServer,
 } from './settings-controller.ts'
 import { TYPERT_REMOTE, REMOTE_NAMESPACE } from '../remote.ts'
@@ -99,10 +100,18 @@ export async function apply(ctx: Context): Promise<void> {
     disableMcp: request => unwrapRemote(() => mcpMgr().disableMcp(request)),
     describeMcp: request => unwrapRemote(() => mcpMgr().describeMcp(request)),
   }
+  const presets = async (): Promise<readonly McpPresetOption[]> => {
+    const result = await ctx.remote.pluginInventory.list()
+    if (!result.ok) {
+      throw new Error(`pluginInventory.list failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return (result.value.agentPresets ?? []).map(group => ({ id: group.id, name: group.name ?? group.id }))
+  }
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
     mcps,
     authoring,
+    presets,
   )
   ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: scope')
 

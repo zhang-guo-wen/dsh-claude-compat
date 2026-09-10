@@ -78,6 +78,14 @@ export interface ContextInjectionFlags {
   mcpDescriptions: Record<string, string>
 }
 
+/** One agent preset the MCP editor can target. */
+export interface McpPresetOption {
+  /** Preset id used in the composition target. */
+  readonly id: string
+  /** Display name the preset published, or the id. */
+  readonly name: string
+}
+
 /** Host-authoring callbacks projected into the MCP management section. */
 export interface McpAuthoringActions {
   /** Add one MCP row and resolve after the Host commits it. */
@@ -125,6 +133,8 @@ export interface ContextInjectionSectionFace {
   describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
   /** Resolve the current loaded MCP roster from the Host plugin inventory. */
   mcps: () => Promise<readonly McpServer[]>
+  /** Resolve the agent presets the editor can target. */
+  presets: () => Promise<readonly McpPresetOption[]>
 }
 
 /**
@@ -178,6 +188,7 @@ export class ContextInjectionController {
     private readonly scope: SettingsScope<ContextInjectionFlags>,
     private readonly mcps: () => Promise<readonly McpServer[]>,
     private readonly authoring: McpAuthoringActions,
+    private readonly presets: () => Promise<readonly McpPresetOption[]>,
   ) {
     this.store = createSnapshotStore(this.projection())
     this.unsubscribe = scope.subscribe(() => this.publish())
@@ -200,6 +211,7 @@ export class ContextInjectionController {
       disableMcp: this.authoring.disableMcp,
       describeMcp: this.authoring.describeMcp,
       mcps: this.mcps,
+      presets: this.presets,
     }
   }
 

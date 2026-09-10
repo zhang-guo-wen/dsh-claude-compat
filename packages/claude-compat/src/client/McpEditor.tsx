@@ -8,7 +8,7 @@ import type {
   McpSpec,
 } from '../types.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
-import type { McpServer } from './settings-controller.ts'
+import type { McpPresetOption, McpServer } from './settings-controller.ts'
 import css from './ContextInjectionSection.module.css'
 
 /** Localized `t` bound to this section's dictionary namespace. */
@@ -28,6 +28,7 @@ interface McpEditorProps {
   readonly busy: boolean
   readonly error: string | null
   readonly describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
+  readonly presets: () => Promise<readonly McpPresetOption[]>
   readonly descriptionInitial: string
   readonly onUpdateDescription: (key: string, value: string) => void
   readonly t: Translate
@@ -104,10 +105,10 @@ function parseSpec(text: string, invalid: string): McpSpec {
   throw new Error(invalid)
 }
 
-/** Modal editor: scope/title/description fields plus one JSON box for the spec. */
-export function McpEditor({ open, mode, server, disabled, busy, error, describeMcp, descriptionInitial, onUpdateDescription, t, onClose, onSubmit }: McpEditorProps): ReactNode {
-  const [scope, setScope] = useState<'global' | 'preset'>(server?.scope ?? 'global')
-  const [agentPreset, setAgentPreset] = useState(server?.presetId ?? '')
+/** Modal editor: one scope dropdown, title/description fields, and a JSON spec box. */
+export function McpEditor({ open, mode, server, disabled, busy, error, describeMcp, presets, descriptionInitial, onUpdateDescription, t, onClose, onSubmit }: McpEditorProps): ReactNode {
+  const [scopeValue, setScopeValue] = useState(server?.scope === 'preset' ? server.presetId ?? '' : '')
+  const [presetOptions, setPresetOptions] = useState<readonly McpPresetOption[]>([])
   const [title, setTitle] = useState(server?.serverName ?? '')
   const [description, setDescription] = useState(descriptionInitial)
   const [json, setJson] = useState('')
@@ -119,10 +120,13 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
     if (!open) return
     let current = true
     setLocalError(null)
-    setScope(server?.scope ?? 'global')
-    setAgentPreset(server?.presetId ?? '')
+    setScopeValue(server?.scope === 'preset' ? server.presetId ?? '' : '')
     setTitle(server?.serverName ?? '')
     setDescription(descriptionInitial)
+    void presets().then(
+      (list) => { if (current) setPresetOptions(list) },
+      () => { if (current) setPresetOptions([]) },
+    )
     if (mode === 'edit' && server?.entryId) {
       setLoading(true)
       const target = server.scope === 'global'
@@ -136,17 +140,16 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
       setJson(specJson(undefined))
     }
     return () => { current = false }
-  }, [editKey, mode, open, server, descriptionInitial, t])
+  }, [editKey, mode, open, server, descriptionInitial, presets, t])
 
   const submit = (): void => {
     try {
       const serverName = title.trim()
       if (serverName === '') throw new Error(t('mcp.form.required'))
       const spec = parseSpec(json, t('mcp.form.jsonInvalid'))
-      const target = scope === 'global'
+      const target = scopeValue === ''
         ? { scope: 'global' as const }
-        : { scope: 'preset' as const, agentPreset: agentPreset.trim() }
-      if (target.scope === 'preset' && target.agentPreset === '') throw new Error(t('mcp.form.required'))
+        : { scope: 'preset' as const, agentPreset: scopeValue }
       const entryId = mode === 'edit' ? server?.entryId ?? '' : undefined
       if (mode === 'edit' && entryId === '') throw new Error(t('mcp.form.required'))
       const request: McpEditorRequest = {
@@ -157,7 +160,10 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
       } as McpEditorRequest
       onSubmit(request)
       if (description.trim() !== '') {
-        onUpdateDescription(descriptionKey(scope, agentPreset.trim(), serverName), description.trim())
+        onUpdateDescription(
+          descriptionKey(scopeValue === '' ? 'global' : 'preset', scopeValue, serverName),
+          description.trim(),
+        )
       }
     } catch (cause) {
       setLocalError(cause instanceof Error ? cause.message : t('mcp.form.jsonInvalid'))
@@ -166,6 +172,7 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
 
   const formDisabled = disabled || busy
   const titleText = mode === 'add' ? t('mcp.form.addTitle') : t('mcp.form.editTitle')
+  const showsCurrentPreset = scopeValue !== '' && !presetOptions.some(option => option.id === scopeValue)
   return (
     <Modal
       open={open}
@@ -186,17 +193,20 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
       <div className={css.mcpForm}>
         <label className={css.formField}>
           <span className={css.formLabel}>{t('mcp.form.scope')}</span>
-          <select className={css.formSelect} value={scope} disabled={formDisabled || mode === 'edit'} aria-label={t('mcp.form.scope')} onChange={(event) => { setScope(event.currentTarget.value as 'global' | 'preset'); setLocalError(null) }}>
-            <option value="global">{t('mcp.scopeGlobal')}</option>
-            <option value="preset">{t('mcp.scopePreset')}</option>
+          <select
+            className={css.formSelect}
+            value={scopeValue}
+            disabled={formDisabled || mode === 'edit'}
+            aria-label={t('mcp.form.scope')}
+            onChange={(event) => { setScopeValue(event.currentTarget.value); setLocalError(null) }}
+          >
+            <option value="">{t('mcp.scopeGlobal')}</option>
+            {presetOptions.map(option => (
+              <option key={option.id} value={option.id}>{option.name}</option>
+            ))}
+            {showsCurrentPreset ? <option value={scopeValue}>{scopeValue}</option> : null}
           </select>
         </label>
-        {scope === 'preset' ? (
-          <label className={css.formField}>
-            <span className={css.formLabel}>{t('mcp.form.preset')}</span>
-            <Input value={agentPreset} disabled={formDisabled || mode === 'edit'} aria-label={t('mcp.form.preset')} onChange={(event) => { setAgentPreset(event.currentTarget.value); setLocalError(null) }} />
-          </label>
-        ) : null}
         <label className={css.formField}>
           <span className={css.formLabel}>{t('mcp.form.serverName')}</span>
           <Input value={title} disabled={formDisabled} aria-label={t('mcp.form.serverName')} onChange={(event) => { setTitle(event.currentTarget.value); setLocalError(null) }} />
