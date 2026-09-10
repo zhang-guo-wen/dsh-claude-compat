@@ -38,6 +38,8 @@ import type {
   DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
+  McpGateStateRequest,
+  McpGateStateResult,
   McpMutationResult,
 } from '../types.ts'
 
@@ -61,6 +63,7 @@ interface ClaudeCompatMcpNamespace {
   editMcp(request: EditMcpRequest): Promise<RemoteResult<McpMutationResult>>
   disableMcp(request: DisableMcpRequest): Promise<RemoteResult<McpMutationResult>>
   describeMcp(request: DescribeMcpRequest): Promise<RemoteResult<DescribeMcpResult>>
+  gateState(request: McpGateStateRequest): Promise<RemoteResult<McpGateStateResult>>
 }
 
 /** Unwrap a Typert `RemoteResult` or surface the Host failure. */
@@ -107,11 +110,15 @@ export async function apply(ctx: Context): Promise<void> {
     }
     return (result.value.agentPresets ?? []).map(group => ({ id: group.id, name: group.name ?? group.id }))
   }
+  const suppressedMcps = async (): Promise<readonly string[]> =>
+    unwrapRemote(() => mcpMgr().gateState({}))
+      .then(state => state.suppressed)
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
     mcps,
     authoring,
     presets,
+    suppressedMcps,
   )
   ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: scope')
 

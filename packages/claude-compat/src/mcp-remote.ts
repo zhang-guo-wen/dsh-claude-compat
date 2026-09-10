@@ -24,10 +24,13 @@ import type {
   DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
+  McpGateStateRequest,
+  McpGateStateResult,
   McpMutationResult,
   McpSpec,
   McpTarget,
 } from './types.ts'
+import type { McpPreloadGate } from './mcp-gate.ts'
 
 /** Minimal optional surface read from the agent-preset service. */
 interface AgentPresetResolver {
@@ -59,7 +62,12 @@ export class ClaudeCompatMcp extends TypertRemoteService {
 
   private mutationQueue: Promise<unknown> = Promise.resolve()
 
-  constructor(ctx: Context) {
+  /**
+   * @param ctx - host context.
+   * @param gate - the preload gate the mutations must leave in line with the
+   *   current loading mode.
+   */
+  constructor(ctx: Context, private readonly gate: McpPreloadGate) {
     super(ctx, 'claudeCompatMcp')
   }
 
@@ -72,7 +80,9 @@ export class ClaudeCompatMcp extends TypertRemoteService {
    */
   @Remote('addMcp')
   async addMcp(request: AddMcpRequest): Promise<McpMutationResult> {
-    return this.enqueue(() => this.add(request))
+    const result = await this.enqueue(() => this.add(request))
+    await this.gate.reconcile()
+    return result
   }
 
   /**
@@ -84,7 +94,9 @@ export class ClaudeCompatMcp extends TypertRemoteService {
    */
   @Remote('editMcp')
   async editMcp(request: EditMcpRequest): Promise<McpMutationResult> {
-    return this.enqueue(() => this.edit(request))
+    const result = await this.enqueue(() => this.edit(request))
+    await this.gate.reconcile()
+    return result
   }
 
   /**
@@ -96,7 +108,23 @@ export class ClaudeCompatMcp extends TypertRemoteService {
    */
   @Remote('disableMcp')
   async disableMcp(request: DisableMcpRequest): Promise<McpMutationResult> {
-    return this.enqueue(() => this.disable(request))
+    const result = await this.enqueue(() => this.disable(request))
+    await this.gate.reconcile()
+    return result
+  }
+
+  /**
+   * Report which allowed rows the preload gate currently holds unmounted.
+   * @param request - empty placeholder; the gate state is host-wide. The
+   *   parameter must keep this name: the gateway derives its descriptor from the
+   *   method signature and rejects a payload whose field does not match.
+   * @returns the suppressed row keys in the settings page's own key format.
+   */
+  @Remote('gateState')
+  async gateState(request: McpGateStateRequest): Promise<McpGateStateResult> {
+    void request
+    await this.gate.reconcile()
+    return { suppressed: [...this.gate.suppressedKeys()] }
   }
 
   /**

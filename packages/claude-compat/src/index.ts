@@ -26,11 +26,17 @@ import {
 import { apply as commandBtwApply } from './command-btw.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
 import { parseMcpLoadingMode, registerMcpTools, type McpLoadingMode } from './lazy-mcp.ts'
+import { createMcpPreloadGate, MCP_ROW_EVENTS, resolvePresetMounts, type GateMount } from './mcp-gate.ts'
+import { livePresetMounts } from '@deepseek-ai/dsh-agent-presets'
+import type { Fiber } from '@deepseek-ai/cordis'
+import { MCP_CLIENT_MODULE } from './mcp-authoring.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
 export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
 export { MCP_LOADING_MODES, parseMcpLoadingMode, registerMcpTools } from './lazy-mcp.ts'
 export type { McpLoadingMode } from './lazy-mcp.ts'
+export { mcpRowKey } from './mcp-gate.ts'
+export type { McpPreloadGate, McpRowGateState } from './mcp-gate.ts'
 export type { McpEntryConfig, McpTransportConfig, McpSpec, McpTarget } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -82,18 +88,44 @@ export const Config: Schema<Config> = z.object({
  * the `context-injection` namespace, and the `/btw` command.
  */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  // On-demand MCP loading. The mode is a live user setting, so a committed
-  // change swaps the tool set: the previous registration releases its tools and
-  // stops the servers it started before the new mode registers its own.
+  // MCP loading has two inputs. The user's composition says which servers may
+  // be used at all; the mode says whether an allowed server also takes part in
+  // every request. The gate holds the composed rows to that second answer, and
+  // the tool set is re-registered with the new mode on every commit.
   let mcpLoading = parseMcpLoadingMode(config.mcpLoading)
-  let disposeMcpTools = registerMcpTools(ctx, mcpLoading)
-  ctx.effect(() => () => { disposeMcpTools() }, 'claude-compat: mcp tools')
+  const mountReader = await resolvePresetMounts(
+    ctx,
+    within => livePresetMounts(within as Fiber | undefined) as readonly GateMount[],
+  )
+  const gate = createMcpPreloadGate(ctx, () => mcpLoading, mountReader, (message) => { ctx.logger.warn(message) })
+  let disposeMcpTools = registerMcpTools(ctx, mcpLoading, gate)
+  ctx.effect(() => () => { disposeMcpTools(); gate.dispose() }, 'claude-compat: mcp tools')
+  const resync = (): void => { void gate.reconcile() }
+  // A preset mounts its rows when a session first selects it and re-mounts them
+  // whenever the composition file changes; both come back through these events,
+  // which is what keeps the gate's answer true across a session's lifetime.
+  // `agent-preset/selected` is emitted on the context without a declaration in
+  // the Cordis event map, so the listener surface is stated here.
+  const events = ctx as unknown as {
+    on(name: string, listener: (...args: readonly unknown[]) => void): () => void
+  }
+  for (const event of MCP_ROW_EVENTS) {
+    ctx.effect(() => events.on(event, (...args) => {
+      if (event === 'loader/entry-init') {
+        const entry = args[0] as { options?: { name?: string } } | undefined
+        if (entry?.options?.name !== MCP_CLIENT_MODULE) return
+      }
+      resync()
+    }), `claude-compat: mcp gate follows ${event}`)
+  }
+  await gate.reconcile()
   const flags = registerContextInjection(ctx, config, (next) => {
     const mode = parseMcpLoadingMode(next.mcpLoading)
     if (mode === mcpLoading) return
     mcpLoading = mode
     disposeMcpTools()
-    disposeMcpTools = registerMcpTools(ctx, mode)
+    disposeMcpTools = registerMcpTools(ctx, mode, gate)
+    resync()
   })
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().claude }))
   claudeInstructionListener(ctx, config, () => flags().claude)
@@ -127,7 +159,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // the Loader lazily inside its methods, so it must be created unconditionally
   // (a Loader-presence guard here would skip registration when the service is
   // not yet ready and the client would 404 on every MCP mutation).
-  new ClaudeCompatMcp(ctx)
+  new ClaudeCompatMcp(ctx, gate)
 }
 
 

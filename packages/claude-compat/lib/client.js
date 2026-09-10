@@ -18,52 +18,52 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var ContextInjectionSection_module_css_default = {
+			"switchText": "_7SvOdG_switchText",
+			"panel": "_7SvOdG_panel",
+			"modeOptionActive": "_7SvOdG_modeOptionActive",
+			"mcpStatus": "_7SvOdG_mcpStatus",
+			"formJson": "_7SvOdG_formJson",
+			"promptArea": "_7SvOdG_promptArea",
+			"switchRow": "_7SvOdG_switchRow",
+			"tabs": "_7SvOdG_tabs",
+			"unavailable": "_7SvOdG_unavailable",
+			"formSelect": "_7SvOdG_formSelect",
+			"mcpToolbar": "_7SvOdG_mcpToolbar",
+			"mcpActions": "_7SvOdG_mcpActions",
+			"mcpActionError": "_7SvOdG_mcpActionError",
+			"formError": "_7SvOdG_formError",
+			"empty": "_7SvOdG_empty",
+			"mcpRight": "_7SvOdG_mcpRight",
+			"formField": "_7SvOdG_formField",
+			"modeName": "_7SvOdG_modeName",
+			"modeDesc": "_7SvOdG_modeDesc",
+			"mcpRow": "_7SvOdG_mcpRow",
+			"mcpForm": "_7SvOdG_mcpForm",
+			"mcpSub": "_7SvOdG_mcpSub",
 			"intro": "_7SvOdG_intro",
 			"switchSectionLabel": "_7SvOdG_switchSectionLabel",
-			"modeOption": "_7SvOdG_modeOption",
-			"mcpNotice": "_7SvOdG_mcpNotice",
-			"formField": "_7SvOdG_formField",
-			"modeDesc": "_7SvOdG_modeDesc",
-			"badge": "_7SvOdG_badge",
-			"mcpDesc": "_7SvOdG_mcpDesc",
-			"tabs": "_7SvOdG_tabs",
-			"promptArea": "_7SvOdG_promptArea",
-			"fieldHint": "_7SvOdG_fieldHint",
-			"status": "_7SvOdG_status",
-			"mcpToolbar": "_7SvOdG_mcpToolbar",
-			"mcpRetry": "_7SvOdG_mcpRetry",
-			"mcpAction": "_7SvOdG_mcpAction",
-			"modeGroup": "_7SvOdG_modeGroup",
-			"mcpName": "_7SvOdG_mcpName",
-			"switchLabel": "_7SvOdG_switchLabel",
-			"tab": "_7SvOdG_tab",
-			"empty": "_7SvOdG_empty",
-			"unavailable": "_7SvOdG_unavailable",
-			"mcpForm": "_7SvOdG_mcpForm",
-			"switchRow": "_7SvOdG_switchRow",
-			"formSelect": "_7SvOdG_formSelect",
-			"fieldLabel": "_7SvOdG_fieldLabel",
-			"formLabel": "_7SvOdG_formLabel",
-			"formError": "_7SvOdG_formError",
-			"modeBlock": "_7SvOdG_modeBlock",
-			"mcpList": "_7SvOdG_mcpList",
-			"switchFiles": "_7SvOdG_switchFiles",
-			"field": "_7SvOdG_field",
-			"panel": "_7SvOdG_panel",
-			"formJson": "_7SvOdG_formJson",
-			"modeOptionActive": "_7SvOdG_modeOptionActive",
-			"mcpSub": "_7SvOdG_mcpSub",
-			"mcpActions": "_7SvOdG_mcpActions",
-			"switchText": "_7SvOdG_switchText",
-			"mcpMain": "_7SvOdG_mcpMain",
-			"section": "_7SvOdG_section",
-			"mcpFailure": "_7SvOdG_mcpFailure",
-			"mcpActionError": "_7SvOdG_mcpActionError",
-			"modeName": "_7SvOdG_modeName",
-			"mcpStatus": "_7SvOdG_mcpStatus",
-			"mcpRight": "_7SvOdG_mcpRight",
 			"switchDesc": "_7SvOdG_switchDesc",
-			"mcpRow": "_7SvOdG_mcpRow"
+			"mcpName": "_7SvOdG_mcpName",
+			"badge": "_7SvOdG_badge",
+			"field": "_7SvOdG_field",
+			"status": "_7SvOdG_status",
+			"mcpFailure": "_7SvOdG_mcpFailure",
+			"section": "_7SvOdG_section",
+			"mcpMain": "_7SvOdG_mcpMain",
+			"mcpDesc": "_7SvOdG_mcpDesc",
+			"mcpNotice": "_7SvOdG_mcpNotice",
+			"switchLabel": "_7SvOdG_switchLabel",
+			"modeGroup": "_7SvOdG_modeGroup",
+			"modeOption": "_7SvOdG_modeOption",
+			"mcpList": "_7SvOdG_mcpList",
+			"mcpRetry": "_7SvOdG_mcpRetry",
+			"switchFiles": "_7SvOdG_switchFiles",
+			"modeBlock": "_7SvOdG_modeBlock",
+			"tab": "_7SvOdG_tab",
+			"fieldLabel": "_7SvOdG_fieldLabel",
+			"mcpAction": "_7SvOdG_mcpAction",
+			"fieldHint": "_7SvOdG_fieldHint",
+			"formLabel": "_7SvOdG_formLabel"
 		};
 		//#endregion
 		//#region src/client/McpEditor.tsx
@@ -421,18 +421,22 @@ window.__ModuleLoader__.load({
 			mcps;
 			authoring;
 			presets;
+			suppressed;
 			store;
 			unsubscribe;
 			/**
 			* @param scope - bound `context-injection` settings scope.
 			* @param mcps - Host-backed MCP roster loader.
 			* @param authoring - Host-backed MCP mutation callbacks.
+			* @param presets - Host-backed agent-preset options loader.
+			* @param suppressed - Host-backed reader of the rows the gate holds unmounted.
 			*/
-			constructor(scope, mcps, authoring, presets) {
+			constructor(scope, mcps, authoring, presets, suppressed) {
 				this.scope = scope;
 				this.mcps = mcps;
 				this.authoring = authoring;
 				this.presets = presets;
+				this.suppressed = suppressed;
 				this.store = (0, _deepseek_ai_dsh_client_store.createSnapshotStore)(this.projection());
 				this.unsubscribe = scope.subscribe(() => this.publish());
 			}
@@ -460,6 +464,7 @@ window.__ModuleLoader__.load({
 					editMcp: this.authoring.editMcp,
 					disableMcp: this.authoring.disableMcp,
 					describeMcp: this.authoring.describeMcp,
+					suppressedMcps: this.suppressed,
 					mcps: this.mcps,
 					presets: this.presets
 				};
@@ -486,9 +491,9 @@ window.__ModuleLoader__.load({
 			}
 			setMcpLoading(mode) {
 				const snapshot = this.scope.getSnapshot();
-				if (snapshot.status !== "ready" || !snapshot.writable) return;
-				if (snapshot.value?.mcpLoading === mode) return;
-				this.scope.set("mcpLoading", mode);
+				if (snapshot.status !== "ready" || !snapshot.writable) return Promise.resolve();
+				if (snapshot.value?.mcpLoading === mode) return Promise.resolve();
+				return this.scope.set("mcpLoading", mode);
 			}
 			projection() {
 				const snapshot = this.scope.getSnapshot();
@@ -548,8 +553,11 @@ window.__ModuleLoader__.load({
 			lazy: "mcp.mode.lazy.desc"
 		};
 		/** Resolve one MCP row's displayed status label and dot. */
-		function statusOf(server, t) {
-			if (server.enabled === false) return {
+		function statusOf(server, suppressed, t) {
+			if (server.enabled === false) return suppressed ? {
+				label: t("mcp.status.deferred"),
+				dot: "idle"
+			} : {
 				label: t("mcp.status.disabled"),
 				dot: "idle"
 			};
@@ -614,7 +622,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 		/** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
-		function McpRow({ server, description, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }) {
+		function McpRow({ server, description, suppressed, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }) {
 			const scope = server.scope === "global" ? t("mcp.scopeGlobal") : `${t("mcp.scopePreset")} · ${server.presetId ?? ""}`;
 			const status = pending === "enabling" ? {
 				label: t("mcp.status.starting"),
@@ -622,9 +630,9 @@ window.__ModuleLoader__.load({
 			} : pending === "disabling" ? {
 				label: t("mcp.status.stopping"),
 				dot: "warning"
-			} : statusOf(server, t);
-			const checked = pending === "enabling" ? true : pending === "disabling" ? false : server.enabled !== false;
-			const disabledNow = server.enabled === false;
+			} : statusOf(server, suppressed, t);
+			const checked = pending === "enabling" ? true : pending === "disabling" ? false : server.enabled !== false || suppressed;
+			const disabledNow = server.enabled === false && !suppressed;
 			const [draft, setDraft] = (0, react.useState)(null);
 			const value = draft ?? description;
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
@@ -682,7 +690,7 @@ window.__ModuleLoader__.load({
 		}
 		/** The settings section body. */
 		function ContextInjectionSection(props) {
-			const { useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, mcps, presets } = props;
+			const { useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, suppressedMcps, mcps, presets } = props;
 			const state = useContextInjection((snapshot) => snapshot);
 			const [activeTab, setActiveTab] = (0, react.useState)("prompt");
 			const [promptDraft, setPromptDraft] = (0, react.useState)(null);
@@ -703,10 +711,17 @@ window.__ModuleLoader__.load({
 			(0, react.useEffect)(() => {
 				let current = true;
 				setMcpView({ status: "loading" });
-				Promise.resolve().then(mcps).then((servers) => {
+				Promise.resolve().then(suppressedMcps).catch((error) => {
+					console.error("[claude-compat] MCP gate read failed", error);
+					return [];
+				}).then(async (suppressed) => ({
+					suppressed,
+					servers: await mcps()
+				})).then(({ servers, suppressed }) => {
 					if (current) setMcpView({
 						status: "ready",
-						servers
+						servers,
+						suppressed: new Set(suppressed)
 					});
 				}, () => {
 					if (current) setMcpView({ status: "error" });
@@ -714,10 +729,24 @@ window.__ModuleLoader__.load({
 				return () => {
 					current = false;
 				};
-			}, [mcps, mcpRequest]);
+			}, [
+				mcps,
+				suppressedMcps,
+				mcpRequest
+			]);
 			const commitPrompt = () => {
 				if (promptDraft === null) return;
 				updateSystemPrompt(promptDraft);
+			};
+			/**
+			* Persisting the mode changes which rows are mounted, so the roster is
+			* re-read once the Host has applied it: the gate read resolves only after
+			* every composed row reached its new state.
+			*/
+			const pickMode = (mode) => {
+				Promise.resolve().then(() => setMcpLoading(mode)).then(suppressedMcps).catch(() => []).then(() => {
+					refreshMcps();
+				});
 			};
 			const openAdd = () => {
 				setEditor({
@@ -917,7 +946,7 @@ window.__ModuleLoader__.load({
 						/* @__PURE__ */ (0, react_jsx_runtime.jsx)(McpLoadingPicker, {
 							value: state.mcpLoading,
 							disabled,
-							onPick: setMcpLoading,
+							onPick: pickMode,
 							t
 						}),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
@@ -962,6 +991,7 @@ window.__ModuleLoader__.load({
 								return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(McpRow, {
 									server,
 									description: server.description ?? state.mcpDescriptions[key] ?? "",
+									suppressed: mcpView.suppressed.has(key),
 									pending: rowPending[key] ?? null,
 									onEditDescription: (value) => {
 										updateMcpDescription(key, value);
@@ -1033,13 +1063,13 @@ window.__ModuleLoader__.load({
 			"codex.files": "注入：.codex/AGENTS.md、~/.codex/AGENTS.md",
 			"mcp.subtitle": "已加载的 MCP 服务器",
 			"mcp.mode.title": "MCP 加载方式",
-			"mcp.mode.hint": "决定会话把 MCP 服务器放进上下文的方式；切换后从下一次请求开始生效。",
+			"mcp.mode.hint": "启用 = 允许使用这台 MCP；这一项决定允许的服务器什么时候进上下文。禁用 = 完全不用：不出现在工具列表，也不能 mcp_load。",
 			"mcp.mode.eager": "全部加载",
-			"mcp.mode.eager.desc": "已启用的 MCP 全部挂载，工具始终在请求里。最省事，但每次请求都要付工具描述的 token。",
+			"mcp.mode.eager.desc": "允许的服务器在会话开始时就挂载，工具始终在请求里。最省事，但每次请求都要付工具描述的 token。",
 			"mcp.mode.dynamic": "动态插入",
-			"mcp.mode.dynamic.desc": "默认不加载；需要时用 mcp_load 把服务器挂进当前会话。工具列表会变化一次，请求缓存前缀随之中断。",
+			"mcp.mode.dynamic.desc": "允许的服务器默认不挂载；需要时用 mcp_load 把它挂进当前会话。工具列表会变化一次，请求缓存前缀随之中断。",
 			"mcp.mode.lazy": "延迟加载",
-			"mcp.mode.lazy.desc": "默认不加载；需要时用 mcp_load 连接、用 mcp_call 调用。工具列表永不变化，请求缓存前缀不中断。",
+			"mcp.mode.lazy.desc": "允许的服务器默认不挂载；需要时用 mcp_load 连接、用 mcp_call 调用。工具列表永不变化，请求缓存前缀不中断。",
 			"mcp.add": "新增 MCP",
 			"mcp.notice.added": "已新增 MCP 服务器",
 			"mcp.notice.saved": "已保存 MCP 服务器",
@@ -1087,6 +1117,7 @@ window.__ModuleLoader__.load({
 			"mcp.form.url": "URL",
 			"mcp.form.headers": "请求头（每行 KEY=VALUE）",
 			"mcp.status.disabled": "已禁用",
+			"mcp.status.deferred": "待加载",
 			"mcp.status.conditional": "条件启用",
 			"mcp.status.configured": "已配置",
 			"mcp.status.pending": "待加载",
@@ -1115,13 +1146,13 @@ window.__ModuleLoader__.load({
 			"codex.files": "Loads: .codex/AGENTS.md, ~/.codex/AGENTS.md",
 			"mcp.subtitle": "Loaded MCP servers",
 			"mcp.mode.title": "MCP loading",
-			"mcp.mode.hint": "How a session folds MCP servers into context. A change applies from the next request on.",
+			"mcp.mode.hint": "Enabled means the server may be used; this setting decides when an allowed server enters context. Disabled means never: it is not offered as a tool and cannot be loaded.",
 			"mcp.mode.eager": "Load all",
-			"mcp.mode.eager.desc": "Every enabled MCP server mounts up front, so its tools are always in the request. Simplest, and you pay the tool descriptions on every request.",
+			"mcp.mode.eager.desc": "Allowed servers mount at session start, so their tools are always in the request. Simplest, and you pay the tool descriptions on every request.",
 			"mcp.mode.dynamic": "Dynamic insert",
-			"mcp.mode.dynamic.desc": "Nothing loads by default; mcp_load mounts a server into the calling session. The tool list changes once per load, which breaks the request-cache prefix.",
+			"mcp.mode.dynamic.desc": "Allowed servers stay unmounted by default; mcp_load mounts one into the calling session. The tool list changes once per load, which breaks the request-cache prefix.",
 			"mcp.mode.lazy": "Lazy",
-			"mcp.mode.lazy.desc": "Nothing loads by default; mcp_load connects and mcp_call invokes. The tool list never changes, so the request-cache prefix survives.",
+			"mcp.mode.lazy.desc": "Allowed servers stay unmounted by default; mcp_load connects one and mcp_call invokes it. The tool list never changes, so the request-cache prefix survives.",
 			"mcp.add": "Add MCP",
 			"mcp.notice.added": "MCP server added",
 			"mcp.notice.saved": "MCP server saved",
@@ -1169,6 +1200,7 @@ window.__ModuleLoader__.load({
 			"mcp.form.url": "URL",
 			"mcp.form.headers": "Headers (one KEY=VALUE per line)",
 			"mcp.status.disabled": "Disabled",
+			"mcp.status.deferred": "Deferred",
 			"mcp.status.conditional": "Conditional",
 			"mcp.status.configured": "Configured",
 			"mcp.status.pending": "Pending",
@@ -1217,7 +1249,8 @@ window.__ModuleLoader__.load({
 				descriptor("addMcp"),
 				descriptor("editMcp"),
 				descriptor("disableMcp"),
-				descriptor("describeMcp")
+				descriptor("describeMcp"),
+				descriptor("gateState")
 			]
 		};
 		//#endregion
@@ -1272,7 +1305,8 @@ window.__ModuleLoader__.load({
 					name: group.name ?? group.id
 				}));
 			};
-			const controller = new ContextInjectionController(ctx.settingsScope.bind({ namespace: CONTEXT_INJECTION_NS }), mcps, authoring, presets);
+			const suppressedMcps = async () => unwrapRemote(() => mcpMgr().gateState({})).then((state) => state.suppressed);
+			const controller = new ContextInjectionController(ctx.settingsScope.bind({ namespace: CONTEXT_INJECTION_NS }), mcps, authoring, presets, suppressedMcps);
 			ctx.effect(() => () => {
 				controller.dispose();
 			}, "ui-context-injection: scope");

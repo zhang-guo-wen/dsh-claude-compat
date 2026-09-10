@@ -24,6 +24,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MCP_CLIENT_MODULE } from './mcp-authoring.ts'
 import { mcpEntryConfig, type McpEntryConfig } from './mcp-config.ts'
+import type { McpPreloadGate } from './mcp-gate.ts'
 import type { McpSpec, McpTarget } from './types.ts'
 
 /** How a configured-but-stopped MCP server reaches the model once loaded. */
@@ -214,12 +215,29 @@ const SERVER_ROW_SCHEMA = {
  * Register the on-demand MCP tools in one composition scope.
  * @param ctx - scope the tools belong to (a preset row's context).
  * @param mode - how a loaded server reaches the model.
+ * @param gate - the preload gate; it decides which composed rows this session
+ *   is allowed to load, and holds the rest out of every request.
  * @returns a disposer that unregisters every tool and stops every server this
  *   registration started. `eager` registers nothing, so its disposer is a no-op.
  */
-export function registerMcpTools(ctx: Context, mode: McpLoadingMode): () => void {
+export function registerMcpTools(ctx: Context, mode: McpLoadingMode, gate: McpPreloadGate): () => void {
   const tools = ctx.get('tools') as ToolRegistry | undefined
   if (tools === undefined || mode === 'eager') return () => {}
+  /**
+   * The rows this session may load: composed rows the user has not disabled.
+   * The gate is re-read first because a preset composition is also rebuilt when
+   * its file changes, and a row that just came back would otherwise be treated
+   * as still absent.
+   */
+  const allowedRows = async (): Promise<McpRow[]> => {
+    await gate.reconcile()
+    return (await listRows(ctx)).filter(row => gate.stateFor(row.target, row.entryId)?.allowed ?? row.enabled)
+  }
+  /** Whether a row's tools are in every request already, without an `mcp_load`. */
+  const preloaded = (row: McpRow): boolean => {
+    const state = gate.stateFor(row.target, row.entryId)
+    return state === undefined ? row.enabled : state.allowed && !state.suppressed
+  }
   /** Loaded servers keyed by agent id, then serverName. */
   const mounted = new Map<string, Map<string, MountedServer>>()
   /** Live tool registrations, undone by the returned disposer. */
@@ -243,9 +261,9 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): () => void
   register(defineTool({
     name: 'mcp_list',
     description:
-      'List the MCP servers configured for this deployment, their scope, and whether each is running. '
-      + 'Servers that are configured but not running can be started on demand with `mcp_load`; load only '
-      + 'what you need, because a running server costs prompt tokens.',
+      'List the MCP servers this session may use, their scope, and whether each is running. Disabled '
+      + 'servers are not listed. Servers that are allowed but not running can be started on demand with '
+      + '`mcp_load`; load only what you need, because a running server costs prompt tokens.',
     parameters: {},
     output: {
       schema: { type: 'array', items: SERVER_ROW_SCHEMA },
@@ -258,10 +276,12 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): () => void
     },
     async execute(_args, exec) {
       const running = exec.agent === undefined ? undefined : mounted.get(exec.agent.id)
-      return (await listRows(ctx)).map(row => ({
+      return (await allowedRows()).map(row => ({
         name: row.serverName,
         scope: row.scopeLabel,
-        loaded: row.enabled || running?.has(row.serverName) === true,
+        // "Loaded" means this session already pays for the row's tools: either
+        // the composition preloaded it, or `mcp_load` pulled it in here.
+        loaded: preloaded(row) || running?.has(row.serverName) === true,
       }))
     },
   }))
@@ -313,8 +333,12 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): () => void
       if (existing !== undefined) {
         return { server: serverName, tools: describeTools(existing) }
       }
-      const row = (await listRows(ctx)).find(candidate => candidate.serverName === serverName)
-      if (row === undefined) throw new Error(`unknown MCP server "${serverName}" — call mcp_list for the configured names`)
+      const row = (await allowedRows()).find(candidate => candidate.serverName === serverName)
+      if (row === undefined) {
+        throw new Error(
+          `unknown or disabled MCP server "${serverName}" — call mcp_list for the servers this session may load`,
+        )
+      }
       const spec = await describeRow(ctx, row)
       const config = mcpEntryConfig(spec, serverName)
       if (mode === 'lazy') {

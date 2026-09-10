@@ -57,5 +57,6 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
     descriptor('editMcp'),
     descriptor('disableMcp'),
     descriptor('describeMcp'),
+    descriptor('gateState'),
   ],
 }

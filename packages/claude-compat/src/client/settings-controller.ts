@@ -137,7 +137,7 @@ export interface ContextInjectionSectionFace {
   /** Persist one MCP row's description. */
   updateMcpDescription: (key: string, description: string) => void
   /** Persist the MCP loading mode the user picked. */
-  setMcpLoading: (mode: McpLoadingOption) => void
+  setMcpLoading: (mode: McpLoadingOption) => Promise<void>
   /** Add one MCP row through the Claude-compatible Host Remote. */
   addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
   /** Edit one MCP row through the Claude-compatible Host Remote. */
@@ -146,6 +146,12 @@ export interface ContextInjectionSectionFace {
   disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
   /** Read one MCP row's connection spec through the Claude-compatible Host Remote. */
   describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
+  /**
+   * Keys of the allowed rows the Host holds unmounted because the loading mode
+   * does not preload. The list uses them to tell "disabled by the user" apart
+   * from "enabled, but deliberately not in this request".
+   */
+  suppressedMcps: () => Promise<readonly string[]>
   /** Resolve the current loaded MCP roster from the Host plugin inventory. */
   mcps: () => Promise<readonly McpServer[]>
   /** Resolve the agent presets the editor can target. */
@@ -198,12 +204,15 @@ export class ContextInjectionController {
    * @param scope - bound `context-injection` settings scope.
    * @param mcps - Host-backed MCP roster loader.
    * @param authoring - Host-backed MCP mutation callbacks.
+   * @param presets - Host-backed agent-preset options loader.
+   * @param suppressed - Host-backed reader of the rows the gate holds unmounted.
    */
   constructor(
     private readonly scope: SettingsScope<ContextInjectionFlags>,
     private readonly mcps: () => Promise<readonly McpServer[]>,
     private readonly authoring: McpAuthoringActions,
     private readonly presets: () => Promise<readonly McpPresetOption[]>,
+    private readonly suppressed: () => Promise<readonly string[]>,
   ) {
     this.store = createSnapshotStore(this.projection())
     this.unsubscribe = scope.subscribe(() => this.publish())
@@ -226,6 +235,7 @@ export class ContextInjectionController {
       editMcp: this.authoring.editMcp,
       disableMcp: this.authoring.disableMcp,
       describeMcp: this.authoring.describeMcp,
+      suppressedMcps: this.suppressed,
       mcps: this.mcps,
       presets: this.presets,
     }
@@ -255,11 +265,11 @@ export class ContextInjectionController {
     void this.scope.set('mcpDescriptions', next)
   }
 
-  private setMcpLoading(mode: McpLoadingOption): void {
+  private setMcpLoading(mode: McpLoadingOption): Promise<void> {
     const snapshot = this.scope.getSnapshot()
-    if (snapshot.status !== 'ready' || !snapshot.writable) return
-    if (snapshot.value?.mcpLoading === mode) return
-    void this.scope.set('mcpLoading', mode)
+    if (snapshot.status !== 'ready' || !snapshot.writable) return Promise.resolve()
+    if (snapshot.value?.mcpLoading === mode) return Promise.resolve()
+    return this.scope.set('mcpLoading', mode)
   }
 
   private projection(): ContextInjectionSectionState {

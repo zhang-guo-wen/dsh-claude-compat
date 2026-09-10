@@ -1432,6 +1432,7 @@ let ClaudeCompatMcp = (() => {
 	let _addMcp_decorators;
 	let _editMcp_decorators;
 	let _disableMcp_decorators;
+	let _gateState_decorators;
 	let _describeMcp_decorators;
 	return class ClaudeCompatMcp extends _classSuper {
 		static {
@@ -1439,6 +1440,7 @@ let ClaudeCompatMcp = (() => {
 			_addMcp_decorators = [Remote("addMcp")];
 			_editMcp_decorators = [Remote("editMcp")];
 			_disableMcp_decorators = [Remote("disableMcp")];
+			_gateState_decorators = [Remote("gateState")];
 			_describeMcp_decorators = [Remote("describeMcp")];
 			__esDecorate(this, null, _addMcp_decorators, {
 				kind: "method",
@@ -1473,6 +1475,17 @@ let ClaudeCompatMcp = (() => {
 				},
 				metadata: _metadata
 			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _gateState_decorators, {
+				kind: "method",
+				name: "gateState",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "gateState" in obj,
+					get: (obj) => obj.gateState
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
 			__esDecorate(this, null, _describeMcp_decorators, {
 				kind: "method",
 				name: "describeMcp",
@@ -1491,10 +1504,17 @@ let ClaudeCompatMcp = (() => {
 				value: _metadata
 			});
 		}
+		gate = __runInitializers(this, _instanceExtraInitializers);
 		static inject = ["loader"];
-		mutationQueue = (__runInitializers(this, _instanceExtraInitializers), Promise.resolve());
-		constructor(ctx) {
+		mutationQueue = Promise.resolve();
+		/**
+		* @param ctx - host context.
+		* @param gate - the preload gate the mutations must leave in line with the
+		*   current loading mode.
+		*/
+		constructor(ctx, gate) {
 			super(ctx, "claudeCompatMcp");
+			this.gate = gate;
 		}
 		/**
 		* Add one MCP client row to a global or user preset composition.
@@ -1504,7 +1524,9 @@ let ClaudeCompatMcp = (() => {
 		* malformed, duplicated, or not an MCP composition row.
 		*/
 		async addMcp(request) {
-			return this.enqueue(() => this.add(request));
+			const result = await this.enqueue(() => this.add(request));
+			await this.gate.reconcile();
+			return result;
 		}
 		/**
 		* Replace one MCP client row's connection configuration.
@@ -1514,7 +1536,9 @@ let ClaudeCompatMcp = (() => {
 		* malformed, duplicated, or not an MCP composition row.
 		*/
 		async editMcp(request) {
-			return this.enqueue(() => this.edit(request));
+			const result = await this.enqueue(() => this.edit(request));
+			await this.gate.reconcile();
+			return result;
 		}
 		/**
 		* Enable or disable one MCP client row.
@@ -1524,7 +1548,20 @@ let ClaudeCompatMcp = (() => {
 		* malformed, or not an MCP composition row.
 		*/
 		async disableMcp(request) {
-			return this.enqueue(() => this.disable(request));
+			const result = await this.enqueue(() => this.disable(request));
+			await this.gate.reconcile();
+			return result;
+		}
+		/**
+		* Report which allowed rows the preload gate currently holds unmounted.
+		* @param request - empty placeholder; the gate state is host-wide. The
+		*   parameter must keep this name: the gateway derives its descriptor from the
+		*   method signature and rejects a payload whose field does not match.
+		* @returns the suppressed row keys in the settings page's own key format.
+		*/
+		async gateState(request) {
+			await this.gate.reconcile();
+			return { suppressed: [...this.gate.suppressedKeys()] };
 		}
 		/**
 		* Read one MCP client row's current connection spec.
@@ -2004,12 +2041,29 @@ const SERVER_ROW_SCHEMA = {
 * Register the on-demand MCP tools in one composition scope.
 * @param ctx - scope the tools belong to (a preset row's context).
 * @param mode - how a loaded server reaches the model.
+* @param gate - the preload gate; it decides which composed rows this session
+*   is allowed to load, and holds the rest out of every request.
 * @returns a disposer that unregisters every tool and stops every server this
 *   registration started. `eager` registers nothing, so its disposer is a no-op.
 */
-function registerMcpTools(ctx, mode) {
+function registerMcpTools(ctx, mode, gate) {
 	const tools = ctx.get("tools");
 	if (tools === void 0 || mode === "eager") return () => {};
+	/**
+	* The rows this session may load: composed rows the user has not disabled.
+	* The gate is re-read first because a preset composition is also rebuilt when
+	* its file changes, and a row that just came back would otherwise be treated
+	* as still absent.
+	*/
+	const allowedRows = async () => {
+		await gate.reconcile();
+		return (await listRows(ctx)).filter((row) => gate.stateFor(row.target, row.entryId)?.allowed ?? row.enabled);
+	};
+	/** Whether a row's tools are in every request already, without an `mcp_load`. */
+	const preloaded = (row) => {
+		const state = gate.stateFor(row.target, row.entryId);
+		return state === void 0 ? row.enabled : state.allowed && !state.suppressed;
+	};
 	/** Loaded servers keyed by agent id, then serverName. */
 	const mounted = /* @__PURE__ */ new Map();
 	/** Live tool registrations, undone by the returned disposer. */
@@ -2032,7 +2086,7 @@ function registerMcpTools(ctx, mode) {
 	};
 	register(defineTool({
 		name: "mcp_list",
-		description: "List the MCP servers configured for this deployment, their scope, and whether each is running. Servers that are configured but not running can be started on demand with `mcp_load`; load only what you need, because a running server costs prompt tokens.",
+		description: "List the MCP servers this session may use, their scope, and whether each is running. Disabled servers are not listed. Servers that are allowed but not running can be started on demand with `mcp_load`; load only what you need, because a running server costs prompt tokens.",
 		parameters: {},
 		output: {
 			schema: {
@@ -2046,10 +2100,10 @@ function registerMcpTools(ctx, mode) {
 		},
 		async execute(_args, exec) {
 			const running = exec.agent === void 0 ? void 0 : mounted.get(exec.agent.id);
-			return (await listRows(ctx)).map((row) => ({
+			return (await allowedRows()).map((row) => ({
 				name: row.serverName,
 				scope: row.scopeLabel,
-				loaded: row.enabled || running?.has(row.serverName) === true
+				loaded: preloaded(row) || running?.has(row.serverName) === true
 			}));
 		}
 	}));
@@ -2109,8 +2163,8 @@ function registerMcpTools(ctx, mode) {
 				server: serverName,
 				tools: describeTools(existing)
 			};
-			const row = (await listRows(ctx)).find((candidate) => candidate.serverName === serverName);
-			if (row === void 0) throw new Error(`unknown MCP server "${serverName}" — call mcp_list for the configured names`);
+			const row = (await allowedRows()).find((candidate) => candidate.serverName === serverName);
+			if (row === void 0) throw new Error(`unknown or disabled MCP server "${serverName}" — call mcp_list for the servers this session may load`);
 			const config = mcpEntryConfig(await describeRow(ctx, row), serverName);
 			if (mode === "lazy") {
 				const { client, tools: listed } = await connectLazy(config);
@@ -2291,6 +2345,112 @@ function renderCallResult(result) {
 	return JSON.stringify(result);
 }
 //#endregion
+//#region src/mcp-gate.ts
+/** Stable key for one row, matching the settings UI's description key. */
+function mcpRowKey(target, serverName) {
+	return target.scope === "preset" ? `preset:${target.agentPreset}:${serverName}` : `global:${serverName}`;
+}
+/**
+* Host events that mean "the composed rows may have changed". `tools/change` is
+* the load-bearing one: a preset composes its rows after this plugin applies,
+* and those rows announce themselves by registering tools. `loader/entry-init`
+* and `agent-preset/selected` narrow the same moment and are kept because they
+* arrive even for a row that publishes no tool.
+*/
+const MCP_ROW_EVENTS = [
+	"tools/change",
+	"loader/entry-init",
+	"agent-preset/selected"
+];
+/**
+* Resolve the `livePresetMounts` reader from the `agent-presets` instance the
+* Loader actually uses. A plain import can land on a second copy of the package
+* (the harness resolves its roster from its own graph), so the Loader's
+* internal resolver is asked first and the static import is the fallback.
+* @param ctx - plugin context holding `ctx.loader`.
+* @param fallback - the statically imported reader.
+* @returns a reader of the live preset mounts for this runtime.
+*/
+async function resolvePresetMounts(ctx, fallback) {
+	const loader = ctx.get("loader");
+	const base = ctx.baseUrl;
+	if (loader?.internal !== void 0 && base !== void 0) try {
+		const mod = await loader.internal.import("@deepseek-ai/dsh-agent-presets", base, {});
+		if (mod.livePresetMounts !== void 0) return mod.livePresetMounts;
+	} catch {}
+	return fallback;
+}
+/**
+* Create the preload gate for one host plugin instance.
+* @param ctx - host context owning the loader and the agent-presets service.
+* @param readMode - reads the committed loading mode on every reconcile.
+* @param mountReader - reader of live preset mounts, from {@link resolvePresetMounts}.
+* @param warn - diagnostics sink for rows the gate cannot drive.
+* @returns the gate the tool registration consults.
+*/
+function createMcpPreloadGate(ctx, readMode, mountReader, warn) {
+	/** Runtime answers, keyed as {@link mcpRowKey}. */
+	const states = /* @__PURE__ */ new Map();
+	/** Serializes reconciles so an entry event cannot interleave with its own run. */
+	let queue = Promise.resolve();
+	let disposed = false;
+	const run = async () => {
+		if (disposed) return;
+		const mode = readMode();
+		const presets = ctx.get("agentPresets");
+		if (presets === void 0) return;
+		const mounts = mountReader(ctx.root.fiber);
+		const seen = /* @__PURE__ */ new Set();
+		for (const mount of mounts) {
+			let rows;
+			try {
+				rows = await readEntryRows((await presets.resolve(mount.presetId)).path);
+			} catch (error) {
+				warn(`claude-compat: cannot read preset "${mount.presetId}" composition: ${String(error)}`);
+				continue;
+			}
+			for (const entry of mount.tree.entries()) {
+				if (entry.options.group === true || entry.options.name !== "@deepseek-ai/dsh-mcp-client") continue;
+				const leaf = presetLeafId(entry.options.id);
+				const serverName = entry.options.id;
+				const fileRow = findEntryRows(rows, leaf)[0];
+				if (fileRow === void 0) continue;
+				const allowed = fileRow.disabled !== true;
+				const wantMounted = allowed && mode === "eager";
+				const key = mcpRowKey({
+					scope: "preset",
+					agentPreset: mount.presetId
+				}, serverName);
+				seen.add(key);
+				if (entry.fiber !== void 0 !== wantMounted) try {
+					await entry.update({ disabled: !wantMounted }, false, true);
+				} catch (error) {
+					warn(`claude-compat: cannot ${wantMounted ? "mount" : "hold"} MCP row "${key}": ${String(error)}`);
+					continue;
+				}
+				states.set(key, {
+					allowed,
+					suppressed: allowed && !wantMounted
+				});
+			}
+		}
+		for (const key of [...states.keys()]) if (!seen.has(key)) states.delete(key);
+	};
+	const reconcile = () => {
+		queue = queue.then(run, run);
+		return queue;
+	};
+	return {
+		reconcile,
+		stateFor: (target, entryId) => states.get(mcpRowKey(target, presetLeafId(entryId))),
+		suppressedKeys: () => [...states.entries()].filter(([, state]) => state.suppressed).map(([key]) => key),
+		dispose: () => {
+			disposed = true;
+			states.clear();
+		}
+	};
+}
+//#endregion
 //#region src/index.ts
 /** Cordis plugin name used by loader diagnostics. */
 const name = "claude-compat";
@@ -2326,16 +2486,32 @@ const Config = z.object({
 */
 async function apply(ctx, config = {}) {
 	let mcpLoading = parseMcpLoadingMode(config.mcpLoading);
-	let disposeMcpTools = registerMcpTools(ctx, mcpLoading);
+	const gate = createMcpPreloadGate(ctx, () => mcpLoading, await resolvePresetMounts(ctx, (within) => livePresetMounts(within)), (message) => {
+		ctx.logger.warn(message);
+	});
+	let disposeMcpTools = registerMcpTools(ctx, mcpLoading, gate);
 	ctx.effect(() => () => {
 		disposeMcpTools();
+		gate.dispose();
 	}, "claude-compat: mcp tools");
+	const resync = () => {
+		gate.reconcile();
+	};
+	const events = ctx;
+	for (const event of MCP_ROW_EVENTS) ctx.effect(() => events.on(event, (...args) => {
+		if (event === "loader/entry-init") {
+			if (args[0]?.options?.name !== "@deepseek-ai/dsh-mcp-client") return;
+		}
+		resync();
+	}), `claude-compat: mcp gate follows ${event}`);
+	await gate.reconcile();
 	const flags = registerContextInjection(ctx, config, (next) => {
 		const mode = parseMcpLoadingMode(next.mcpLoading);
 		if (mode === mcpLoading) return;
 		mcpLoading = mode;
 		disposeMcpTools();
-		disposeMcpTools = registerMcpTools(ctx, mode);
+		disposeMcpTools = registerMcpTools(ctx, mode, gate);
+		resync();
 	});
 	ctx.skills.registerProvider((control) => new ClaudeCodeSkillProvider(ctx, control, {
 		...config,
@@ -2364,7 +2540,7 @@ async function apply(ctx, config = {}) {
 		maxQuestionBytes: config.maxQuestionBytes,
 		provider: config.provider
 	});
-	new ClaudeCompatMcp(ctx);
+	new ClaudeCompatMcp(ctx, gate);
 }
 //#endregion
-export { ClaudeCompatMcp, Config, MCP_LOADING_MODES, apply, assertServerName, inject, mcpEntryConfig, name, parseMcpLoadingMode, registerMcpTools, specFromEntryConfig };
+export { ClaudeCompatMcp, Config, MCP_LOADING_MODES, apply, assertServerName, inject, mcpEntryConfig, mcpRowKey, name, parseMcpLoadingMode, registerMcpTools, specFromEntryConfig };

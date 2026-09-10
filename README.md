@@ -142,14 +142,26 @@ when you actually need a server.
 
 ### Choosing the loading mode
 
-**Settings → Claude Compat → MCP management → MCP loading** selects, out of three, how a stopped
-server reaches the model:
+The two controls answer different questions:
+
+- **A row's enable switch** — may this server be used at all. Disabled means never: it is not listed
+  by `mcp_list` and `mcp_load` refuses it.
+- **Settings → Claude Compat → MCP management → MCP loading** — when an allowed server enters
+  context. One of three:
 
 | Mode | Behavior |
 |---|---|
-| Load all (`eager`) | No on-demand tools; every enabled row mounts at preset mount |
-| Dynamic insert (`dynamic`, default) | `mcp_load` mounts the server into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
-| Lazy (`lazy`) | `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas; the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
+| Load all (`eager`) | Allowed servers mount at session start, so their tools are always in the request |
+| Dynamic insert (`dynamic`, default) | Allowed servers stay **unmounted by default**; `mcp_load` mounts one into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
+| Lazy (`lazy`) | Allowed servers stay **unmounted by default**; `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas, and the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
+
+Measured on one `standard+MCP` preset (alibaba-devops, lightrag, kingdee, playwright): the first
+request carries **29** tools under `dynamic` (built-ins plus `mcp_list`/`mcp_load`/`mcp_unload`) and
+**378** under `eager`, 348 of which are MCP tools.
+
+Holding a row back is **runtime state**: the plugin unmounts the rows in memory and never rewrites
+your preset file (an `agent-presets` composition is an input, not a persistence target), so switching
+modes cannot pollute configuration. The price is one restart of those MCP child processes per switch.
 
 ```yaml
 - name: '@zhang-guo-wen/dsh-claude-compat'

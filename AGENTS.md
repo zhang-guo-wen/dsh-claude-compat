@@ -73,17 +73,19 @@ await mount?.tree.refresh?.()
 
 ### 延迟加载(src/lazy-mcp.ts)
 
-**加载方式(`mcpLoading`)是 `context-injection` 用户设置**(默认值取自 host 插件的 `Config`)**+ UI 三选一**,
-不是 preset 行 —— 见下面的坑。三种取值:
+**两件事分两个开关:** composition 行上的 `disabled` = 用户**允不允许用**(禁用 = 完全不用:不进
+`mcp_list`,`mcp_load` 拒绝);`mcpLoading` = 允许的服务器**什么时候进上下文**。后者是
+`context-injection` 用户设置(默认值取自 host 插件的 `Config`)**+ UI 三选一**。三种取值:
 
-- `eager`:不注册按需工具。
-- `dynamic`(默认):`mcp_load` 把 mcp-client 挂进**调用方 agent 的作用域**,原生注册工具。
-- `lazy`:**用 MCP SDK 直连、完全不注册工具**;`mcp_load` 把工具 schema 作为结果返回,模型用固定的
-  `mcp_call` 代理调用 → **工具列表永不变,请求缓存前缀零失效**。
+- `eager`:允许的行照常挂载;不注册按需工具。
+- `dynamic`(默认):允许的行**默认不挂载**(见下面的 gate);`mcp_load` 把 mcp-client 挂进**调用方 agent
+  的作用域**,原生注册工具。
+- `lazy`:允许的行**默认不挂载**;**用 MCP SDK 直连、完全不注册工具**;`mcp_load` 把工具 schema 作为结果
+  返回,模型用固定的 `mcp_call` 代理调用 → **工具列表永不变,请求缓存前缀零失效**。
 
 `mcp_list` / `mcp_load` / `mcp_unload`(lazy 另加 `mcp_call`)让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token:
 
-- 被**禁用**的 composition 行不挂载,所以它的工具不进目录 —— 这就是"待加载"的来源。
+- 被**禁用**的 composition 行完全不参与:工具不进目录,也不能 `mcp_load`。
 - `mcp_load` 走 **agent 作用域**:`exec.agent.ctx.plugin(mcpClientPlugin, config)`,实例随该会话销毁,
   注册的工具只进这个 agent 的层(所以一个会话加载的服务器不会漏到别的会话)。
 - 工具定义用 `@deepseek-ai/dsh-tools` 的 `defineTool` + `ctx.tools.register(def)`;`register` 返回 disposer,
@@ -100,6 +102,23 @@ standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂�
 请求**生效。`parseMcpLoadingMode` 把无法识别的存量值收敛回 `dynamic`(设置文档是用户可编辑的,不能因为一个
 拼错的值让提交失败)。UI 侧是 `ContextInjectionSection.tsx` 的 `McpLoadingPicker`(三个 radio),
 读写 `context-injection` 的 `mcpLoading` 字段。
+
+### 预加载闸门(src/mcp-gate.ts)
+
+`dynamic`/`lazy` 下"允许但不预加载"靠 **运行时摘行**实现:gate 读每个 preset 的**文件真值**(行 `disabled`)
+得到 allowed,再让 live 行满足 `mounted === (allowed && mode === 'eager')`,用 `entry.update({disabled})`
+驱动挂载/卸载。三条必须记住的性质:
+
+1. **不写文件。** preset 树是 `PresetTree`,`write()` 是空实现(`agent-presets` 的契约:preset 是输入不是
+   持久化目标),所以内存里摘行不会碰用户的 `agent.cordis.yml`。**全局平面的行绝不动** —— 它们的树是
+   file-backed `Include`,`write()` 会把闸门的状态写回配置。
+2. **触发点。** 插件 `apply` 时 preset 还没挂载(`mounts=0`),所以主触发是 `tools/change`(**无过滤广播**),
+   另订阅 `loader/entry-init` / `agent-preset/selected`。`reconcile()` 内部串行化,幂等,可重放。
+3. **一次 reconcile 会真的 kill 掉 MCP 子进程**(`entry.update` 走 `Entry._dispose`),所以设置页先等
+   `gateState`(它内部 await reconcile)再读名册,否则会看到"摘到一半"的名册。
+
+同名坑:**`@Remote` 方法的形参名必须是 `request`**。网关按方法签名推导描述符,写成 `_request` 会让调用方收到
+`args fields do not match the descriptor: unexpected "request"`,而客户端如果吞掉这个错误,表现就是"开关没反应"。
 
 ## MCP JSON 兼容
 

@@ -96,6 +96,22 @@ export interface McpMutationResult {
   readonly disabled: boolean
 }
 
+/** Request for the runtime preload gate's current view. */
+export interface McpGateStateRequest {
+  /** Placeholder field: the gate state is host-wide, so the request carries none. */
+  readonly unused?: boolean
+}
+
+/** The preload gate's runtime view, as the settings page presents it. */
+export interface McpGateStateResult {
+  /**
+   * Keys of the allowed rows the gate keeps unmounted because the loading mode
+   * does not preload. Keyed as the settings page's row key
+   * (`preset:<id>:<serverName>` or `global:<serverName>`).
+   */
+  readonly suppressed: readonly string[]
+}
+
 /** Failure details owned by the MCP authoring Remote. */
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {

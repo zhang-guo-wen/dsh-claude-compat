@@ -43,7 +43,12 @@ type TabId = 'prompt' | 'mcp'
 type McpView =
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | { readonly status: 'ready'; readonly servers: readonly McpServer[] }
+  | {
+    readonly status: 'ready'
+    readonly servers: readonly McpServer[]
+    /** Row keys the gate holds unmounted, so an enabled row reads as deferred. */
+    readonly suppressed: ReadonlySet<string>
+  }
 
 /** Non-empty fiber-phase → localized status key. */
 const PHASE_LABEL = {
@@ -78,8 +83,14 @@ const MODE_DESC = {
 } as const satisfies Record<McpLoadingOption, ContextInjectionSectionKey>
 
 /** Resolve one MCP row's displayed status label and dot. */
-function statusOf(server: McpServer, t: Translate): { label: string; dot: StateDotState } {
-  if (server.enabled === false) return { label: t('mcp.status.disabled'), dot: 'idle' }
+function statusOf(server: McpServer, suppressed: boolean, t: Translate): { label: string; dot: StateDotState } {
+  // A row the gate holds unmounted is still one the user enabled: the loading
+  // mode, not the user, keeps it out of the request.
+  if (server.enabled === false) {
+    return suppressed
+      ? { label: t('mcp.status.deferred'), dot: 'idle' }
+      : { label: t('mcp.status.disabled'), dot: 'idle' }
+  }
   if (server.enabled === 'conditional') return { label: t('mcp.status.conditional'), dot: 'warning' }
   if (server.fiberPhase === null) return { label: t('mcp.status.configured'), dot: 'idle' }
   return { label: t(PHASE_LABEL[server.fiberPhase]), dot: PHASE_DOT[server.fiberPhase] }
@@ -126,9 +137,11 @@ function McpLoadingPicker({ value, disabled, onPick, t }: {
 }
 
 /** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
-function McpRow({ server, description, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
+function McpRow({ server, description, suppressed, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
   readonly server: McpServer
   readonly description: string
+  /** The gate holds this allowed row unmounted because the mode does not preload. */
+  readonly suppressed: boolean
   readonly pending: 'enabling' | 'disabling' | null
   readonly onEditDescription: (value: string) => void
   readonly onEdit: () => void
@@ -146,9 +159,11 @@ function McpRow({ server, description, pending, onEditDescription, onEdit, onTog
     ? { label: t('mcp.status.starting'), dot: 'warning' as StateDotState }
     : pending === 'disabling'
       ? { label: t('mcp.status.stopping'), dot: 'warning' as StateDotState }
-      : statusOf(server, t)
-  const checked = pending === 'enabling' ? true : pending === 'disabling' ? false : server.enabled !== false
-  const disabledNow = server.enabled === false
+      : statusOf(server, suppressed, t)
+  const checked = pending === 'enabling'
+    ? true
+    : pending === 'disabling' ? false : server.enabled !== false || suppressed
+  const disabledNow = server.enabled === false && !suppressed
   const [draft, setDraft] = useState<string | null>(null)
   const value = draft ?? description
   return (
@@ -198,7 +213,7 @@ function McpRow({ server, description, pending, onEditDescription, onEdit, onTog
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
   const {
     useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription,
-    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, mcps, presets,
+    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, suppressedMcps, mcps, presets,
   } = props
   const state = useContextInjection(snapshot => snapshot)
   const [activeTab, setActiveTab] = useState<TabId>('prompt')
@@ -219,16 +234,43 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
   useEffect(() => {
     let current = true
     setMcpView({ status: 'loading' })
-    void Promise.resolve().then(mcps).then(
-      (servers) => { if (current) setMcpView({ status: 'ready', servers }) },
-      () => { if (current) setMcpView({ status: 'error' }) },
-    )
+    // The gate read is awaited FIRST: it resolves only after the Host has
+    // finished applying the loading mode to the composed rows, so the roster
+    // read behind it describes the settled state instead of a half-unmounted
+    // composition. A gate read that fails must not hide the roster — the rows
+    // then render with their composed state until the next refresh.
+    void Promise.resolve()
+      .then(suppressedMcps)
+      .catch((error: unknown): readonly string[] => {
+        console.error('[claude-compat] MCP gate read failed', error)
+        return []
+      })
+      .then(async (suppressed) => ({ suppressed, servers: await mcps() }))
+      .then(
+        ({ servers, suppressed }) => {
+          if (current) setMcpView({ status: 'ready', servers, suppressed: new Set(suppressed) })
+        },
+        () => { if (current) setMcpView({ status: 'error' }) },
+      )
     return () => { current = false }
-  }, [mcps, mcpRequest])
+  }, [mcps, suppressedMcps, mcpRequest])
 
   const commitPrompt = (): void => {
     if (promptDraft === null) return
     updateSystemPrompt(promptDraft)
+  }
+
+  /**
+   * Persisting the mode changes which rows are mounted, so the roster is
+   * re-read once the Host has applied it: the gate read resolves only after
+   * every composed row reached its new state.
+   */
+  const pickMode = (mode: McpLoadingOption): void => {
+    void Promise.resolve()
+      .then(() => setMcpLoading(mode))
+      .then(suppressedMcps)
+      .catch((): readonly string[] => [])
+      .then(() => { refreshMcps() })
   }
 
   const openAdd = (): void => {
@@ -377,7 +419,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
           <McpLoadingPicker
             value={state.mcpLoading}
             disabled={disabled}
-            onPick={setMcpLoading}
+            onPick={pickMode}
             t={t}
           />
           <div className={css.mcpToolbar}>
@@ -407,6 +449,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
                     key={key}
                     server={server}
                     description={server.description ?? state.mcpDescriptions[key] ?? ''}
+                    suppressed={mcpView.suppressed.has(key)}
                     pending={rowPending[key] ?? null}
                     onEditDescription={(value) => { updateMcpDescription(key, value) }}
                     onEdit={() => { openEdit(server) }}
