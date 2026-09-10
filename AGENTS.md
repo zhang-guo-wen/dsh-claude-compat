@@ -71,6 +71,18 @@ const mount = mod.livePresetMounts().filter(m => m.presetId === id).at(-1)
 await mount?.tree.refresh?.()
 ```
 
+### 延迟加载(src/lazy-mcp.ts)
+
+`mcp_list` / `mcp_load` / `mcp_unload` 三个工具让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token:
+
+- 被**禁用**的 composition 行不挂载,所以它的工具不进目录 —— 这就是"待加载"的来源。
+- `mcp_load` 走 **agent 作用域**:`exec.agent.ctx.plugin(mcpClientPlugin, config)`,实例随该会话销毁,
+  注册的工具只进这个 agent 的层(所以一个会话加载的服务器不会漏到别的会话)。
+- 工具定义用 `@deepseek-ai/dsh-tools` 的 `defineTool` + `ctx.tools.register(def)`;`register` 返回 disposer,
+  注册必须包在 `ctx.effect` 里。`exec.agent` 是拿到当前 agent 的唯一途径(无 agent 时要拒绝执行)。
+- mcp-client 的插件对象**经 loader 内部解析**取得(`ctx.loader.internal.import`),与组合用的是同一个模块实例,
+  否则 `serverName` 预留(模块级状态)不共享,可能挂出重复实例。
+
 ## MCP JSON 兼容
 
 编辑器的 JSON 框接受多种写法,缺省要能推断:

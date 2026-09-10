@@ -121,6 +121,25 @@ The **配置范围** dropdown lists Global and every agent preset, so you pick a
 an id. **描述** is a plugin-owned label shown in the list, stored in the `context-injection` settings
 namespace — not part of the MCP connection.
 
+### Lazy loading — start a server only when it is needed
+
+Every running MCP server's tool schemas ride every request, so a deployment with a dozen servers
+pays for all of them all the time. Two things work together to avoid that:
+
+1. **Keep a server stopped.** Disable its row in MCP 管理. A disabled row is never mounted, so its
+   tools stay out of the catalog.
+2. **Start it on demand.** The plugin registers three tools the model can call:
+
+   | Tool | What it does |
+   |---|---|
+   | `mcp_list` | The configured servers, their scope, and whether each is running |
+   | `mcp_load(server)` | Starts one server **for the calling session only** and returns the tool names it added |
+   | `mcp_unload(server)` | Stops that session's server again and shrinks the tool list |
+
+The mount is agent-scoped: a server one session loads never appears in another. This is the same
+trade-off as Claude Code's tool search — you pay one extra round trip, and the loaded schema, only
+when you actually need a server.
+
 ## Claude Code / Codex compatibility
 
 ### Skills

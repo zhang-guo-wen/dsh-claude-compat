@@ -25,6 +25,7 @@ import {
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
+import { registerLazyMcp } from './lazy-mcp.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
 export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
@@ -105,6 +106,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // (a Loader-presence guard here would skip registration when the service is
   // not yet ready and the client would 404 on every MCP mutation).
   new ClaudeCompatMcp(ctx)
+  // Session-scoped lazy MCP: mcp_list / mcp_load / mcp_unload let a session pull
+  // a configured-but-stopped server in on demand instead of running them all.
+  registerLazyMcp(ctx)
 }
 
 

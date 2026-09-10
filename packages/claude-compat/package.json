@@ -44,6 +44,8 @@
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/schemastery": "*",
     "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-scope": "*",
+    "@deepseek-ai/dsh-mcp-client": "*",
     "@deepseek-ai/dsh-fs": "*",
     "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/dsh-session": "*",
@@ -75,6 +77,12 @@
       "optional": true
     },
     "@deepseek-ai/dsh-agent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-scope": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-mcp-client": {
       "optional": true
     },
     "@deepseek-ai/dsh-fs": {
