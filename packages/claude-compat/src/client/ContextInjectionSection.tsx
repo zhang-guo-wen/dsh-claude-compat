@@ -16,7 +16,14 @@ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AddMcpRequest, EditMcpRequest } from '../types.ts'
 import { McpEditor, type McpEditorMode, type McpEditorRequest } from './McpEditor.tsx'
-import { mcpDescriptionKey, type ContextInjectionSectionFace, type McpPhase, type McpServer } from './settings-controller.ts'
+import {
+  MCP_LOADING_OPTIONS,
+  mcpDescriptionKey,
+  type ContextInjectionSectionFace,
+  type McpLoadingOption,
+  type McpPhase,
+  type McpServer,
+} from './settings-controller.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
 import css from './ContextInjectionSection.module.css'
 
@@ -56,12 +63,66 @@ const PHASE_DOT = {
   unloading: 'ongoing',
 } as const satisfies Record<NonNullable<McpPhase>, StateDotState>
 
+/** MCP loading mode → localized option name. */
+const MODE_LABEL = {
+  eager: 'mcp.mode.eager',
+  dynamic: 'mcp.mode.dynamic',
+  lazy: 'mcp.mode.lazy',
+} as const satisfies Record<McpLoadingOption, ContextInjectionSectionKey>
+
+/** MCP loading mode → localized one-line explanation. */
+const MODE_DESC = {
+  eager: 'mcp.mode.eager.desc',
+  dynamic: 'mcp.mode.dynamic.desc',
+  lazy: 'mcp.mode.lazy.desc',
+} as const satisfies Record<McpLoadingOption, ContextInjectionSectionKey>
+
 /** Resolve one MCP row's displayed status label and dot. */
 function statusOf(server: McpServer, t: Translate): { label: string; dot: StateDotState } {
   if (server.enabled === false) return { label: t('mcp.status.disabled'), dot: 'idle' }
   if (server.enabled === 'conditional') return { label: t('mcp.status.conditional'), dot: 'warning' }
   if (server.fiberPhase === null) return { label: t('mcp.status.configured'), dot: 'idle' }
   return { label: t(PHASE_LABEL[server.fiberPhase]), dot: PHASE_DOT[server.fiberPhase] }
+}
+
+/**
+ * The MCP loading mode picker: one radio per mode, each carrying its own
+ * one-line explanation so the trade-off (prompt cost and cache-prefix churn
+ * against tool-binding quality) is readable without leaving the page.
+ */
+function McpLoadingPicker({ value, disabled, onPick, t }: {
+  readonly value: string
+  readonly disabled: boolean
+  readonly onPick: (mode: McpLoadingOption) => void
+  readonly t: Translate
+}): ReactNode {
+  return (
+    <div className={css.modeBlock}>
+      <span className={css.fieldLabel}>{t('mcp.mode.title')}</span>
+      <span className={css.fieldHint}>{t('mcp.mode.hint')}</span>
+      <div className={css.modeGroup} role="radiogroup" aria-label={t('mcp.mode.title')}>
+        {MCP_LOADING_OPTIONS.map((mode) => {
+          const selected = value === mode
+          return (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              data-mcp-mode={mode}
+              className={selected ? `${css.modeOption} ${css.modeOptionActive}` : css.modeOption}
+              disabled={disabled}
+              title={disabled ? t('unavailable') : undefined}
+              onClick={() => { onPick(mode) }}
+            >
+              <span className={css.modeName}>{t(MODE_LABEL[mode])}</span>
+              <span className={css.modeDesc}>{t(MODE_DESC[mode])}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 /** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
@@ -137,7 +198,7 @@ function McpRow({ server, description, pending, onEditDescription, onEdit, onTog
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
   const {
     useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription,
-    addMcp, editMcp, disableMcp, describeMcp, mcps, presets,
+    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, mcps, presets,
   } = props
   const state = useContextInjection(snapshot => snapshot)
   const [activeTab, setActiveTab] = useState<TabId>('prompt')
@@ -312,6 +373,13 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
         </div>
       ) : (
         <div className={css.panel} id="context-injection-mcp" role="tabpanel">
+          {!state.available ? <p className={css.unavailable}>{t('unavailable')}</p> : null}
+          <McpLoadingPicker
+            value={state.mcpLoading}
+            disabled={disabled}
+            onPick={setMcpLoading}
+            t={t}
+          />
           <div className={css.mcpToolbar}>
             <p className={css.mcpSub}>{t('mcp.subtitle')}</p>
             <Button variant="outline" size="sm" onClick={openAdd} disabled={editorBusy}>

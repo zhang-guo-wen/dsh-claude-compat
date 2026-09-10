@@ -38,14 +38,14 @@ Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 �
 
 ### 从 git 仓库安装(推荐)
 
-装**发布 tag**(如 `v0.1.1-alpha.1`),而不是默认分支 —— 这样你之后往 `master` 推的**临时提交不会被人拿到**:
+装**发布 tag**(如 `v0.1.2-alpha.1`),而不是默认分支 —— 这样你之后往 `master` 推的**临时提交不会被人拿到**:
 
 ```sh
 # HTTPS(公开仓库)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
 
 # 或 SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
 ```
 
 写法分两段:`#<ref>` 锁定 **tag / commit / 分支**,`&path:packages/claude-compat` 指定仓库内的插件包
@@ -132,21 +132,22 @@ npx @deepseek-ai/dsh plugin --profile web add /绝对路径/dsh-claude-compat/pa
 
 ### 选择加载方式
 
-插件配置行上的 `mcpLoading` 决定"被停掉的服务器"如何到达模型:
+**设置 → Claude 兼容 → MCP 管理 → MCP 加载方式** 三选一,决定"被停掉的服务器"如何到达模型:
 
 | 模式 | 行为 |
 |---|---|
-| `eager` | 不注册按需工具;每个启用的行在 preset 挂载时直接加载 |
-| `dynamic`(默认) | `mcp_load` 把服务器挂进**当前会话**,它的工具进入请求 —— 工具绑定最好,但每次加载会**变一次工具列表** |
-| `lazy` | `mcp_load` 用 **MCP SDK 直连、完全不注册工具**,把工具 schema 作为结果返回;模型用固定的 `mcp_call` 代理调用 —— **工具列表永不变 → 请求缓存前缀零失效** |
+| 全部加载(`eager`) | 不注册按需工具;每个启用的行在 preset 挂载时直接加载 |
+| 动态插入(`dynamic`,默认) | `mcp_load` 把服务器挂进**当前会话**,它的工具进入请求 —— 工具绑定最好,但每次加载会**变一次工具列表** |
+| 延迟加载(`lazy`) | `mcp_load` 用 **MCP SDK 直连、完全不注册工具**,把工具 schema 作为结果返回;模型用固定的 `mcp_call` 代理调用 —— **工具列表永不变 → 请求缓存前缀零失效** |
 
 ```yaml
 - name: '@zhang-guo-wen/dsh-claude-compat'
   config:
-    mcpLoading: lazy
+    mcpLoading: lazy   # 仅在该用户文档还没有这一项时生效
 ```
 
-该配置在 **host 启动时读取**,改动在下次 `dsh web` 重启后生效。
+选择保存在用户设置的 `context-injection` 命名空间(`~/.dsh/settings.yaml` 里的 `mcpLoading`),**提交后立即换掉工具集**,
+从所有会话的下一次请求起生效;用户还没在 UI 上选过时,才用插件配置行的 `config.mcpLoading` 当默认值。
 
 ## Claude Code / Codex 兼容
 

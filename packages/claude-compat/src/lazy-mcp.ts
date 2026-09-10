@@ -29,6 +29,20 @@ import type { McpSpec, McpTarget } from './types.ts'
 /** How a configured-but-stopped MCP server reaches the model once loaded. */
 export type McpLoadingMode = 'eager' | 'dynamic' | 'lazy'
 
+/** Every {@link McpLoadingMode}, used to validate the persisted setting. */
+export const MCP_LOADING_MODES: readonly McpLoadingMode[] = ['eager', 'dynamic', 'lazy']
+
+/**
+ * Narrow one stored `mcpLoading` value. The settings document is a durable,
+ * user-editable file, so an unknown value falls back to `dynamic` instead of
+ * failing the commit that carried it.
+ * @param value - raw value read from the settings namespace or the plugin config.
+ * @returns the matching mode, or `dynamic` when nothing matches.
+ */
+export function parseMcpLoadingMode(value: unknown): McpLoadingMode {
+  return MCP_LOADING_MODES.includes(value as McpLoadingMode) ? value as McpLoadingMode : 'dynamic'
+}
+
 /** One configured mcp-client row and where its composition lives. */
 interface McpRow {
   readonly target: McpTarget
@@ -200,16 +214,17 @@ const SERVER_ROW_SCHEMA = {
  * Register the on-demand MCP tools in one composition scope.
  * @param ctx - scope the tools belong to (a preset row's context).
  * @param mode - how a loaded server reaches the model.
+ * @returns a disposer that unregisters every tool and stops every server this
+ *   registration started. `eager` registers nothing, so its disposer is a no-op.
  */
-export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
-  if (mode !== 'eager' && mode !== 'dynamic' && mode !== 'lazy') {
-    throw new Error(`claude-compat: unknown mcpLoading ${JSON.stringify(String(mode))} (expected eager | dynamic | lazy)`)
-  }
-  if (mode === 'eager') return
+export function registerMcpTools(ctx: Context, mode: McpLoadingMode): () => void {
   const tools = ctx.get('tools') as ToolRegistry | undefined
-  if (tools === undefined) return
+  if (tools === undefined || mode === 'eager') return () => {}
   /** Loaded servers keyed by agent id, then serverName. */
   const mounted = new Map<string, Map<string, MountedServer>>()
+  /** Live tool registrations, undone by the returned disposer. */
+  const registrations: (() => void)[] = []
+  const register = (definition: unknown): void => { registrations.push(tools.register(definition)) }
 
   const loadedFor = (agentId: string): Map<string, MountedServer> => {
     const existing = mounted.get(agentId)
@@ -225,9 +240,7 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
     mounted.clear()
     await Promise.allSettled(pending)
   }
-  ctx.effect(() => () => stopAll().then(() => undefined), 'claude-compat: mcp tools teardown')
-
-  ctx.effect(() => tools.register(defineTool({
+  register(defineTool({
     name: 'mcp_list',
     description:
       'List the MCP servers configured for this deployment, their scope, and whether each is running. '
@@ -251,9 +264,9 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
         loaded: row.enabled || running?.has(row.serverName) === true,
       }))
     },
-  })), 'claude-compat: mcp_list')
+  }))
 
-  ctx.effect(() => tools.register(defineTool({
+  register(defineTool({
     name: 'mcp_load',
     description: mode === 'lazy'
       ? 'Start one configured but not-running MCP server for THIS session and return its tools. Call the '
@@ -322,10 +335,10 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
         tools: toolNamesFor(tools, agent.ctx, serverName).map(name => ({ name, description: '', schema: '' })),
       }
     },
-  })), 'claude-compat: mcp_load')
+  }))
 
   if (mode === 'lazy') {
-    ctx.effect(() => tools.register(defineTool({
+    register(defineTool({
       name: 'mcp_call',
       description:
         'Call one tool of an MCP server that `mcp_load` started for THIS session. Use the server and tool names '
@@ -367,10 +380,10 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
           isError: (result as { isError?: boolean } | null)?.isError === true,
         }
       },
-    })), 'claude-compat: mcp_call')
+    }))
   }
 
-  ctx.effect(() => tools.register(defineTool({
+  register(defineTool({
     name: 'mcp_unload',
     description:
       'Stop an MCP server that `mcp_load` started for THIS session and release it again. Use it when you are '
@@ -404,7 +417,13 @@ export function registerMcpTools(ctx: Context, mode: McpLoadingMode): void {
       await mount.dispose()
       return { server: serverName, stopped: true }
     },
-  })), 'claude-compat: mcp_unload')
+  }))
+
+  return () => {
+    for (const dispose of [...registrations].reverse()) dispose()
+    registrations.length = 0
+    void stopAll()
+  }
 }
 
 /** One MCP tool projected onto the model-facing shape. */

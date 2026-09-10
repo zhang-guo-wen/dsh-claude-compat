@@ -25,10 +25,12 @@ import {
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
-import { registerMcpTools, type McpLoadingMode } from './lazy-mcp.ts'
+import { parseMcpLoadingMode, registerMcpTools, type McpLoadingMode } from './lazy-mcp.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
 export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
+export { MCP_LOADING_MODES, parseMcpLoadingMode, registerMcpTools } from './lazy-mcp.ts'
+export type { McpLoadingMode } from './lazy-mcp.ts'
 export type { McpEntryConfig, McpTransportConfig, McpSpec, McpTarget } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -80,7 +82,19 @@ export const Config: Schema<Config> = z.object({
  * the `context-injection` namespace, and the `/btw` command.
  */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  const flags = registerContextInjection(ctx, config)
+  // On-demand MCP loading. The mode is a live user setting, so a committed
+  // change swaps the tool set: the previous registration releases its tools and
+  // stops the servers it started before the new mode registers its own.
+  let mcpLoading = parseMcpLoadingMode(config.mcpLoading)
+  let disposeMcpTools = registerMcpTools(ctx, mcpLoading)
+  ctx.effect(() => () => { disposeMcpTools() }, 'claude-compat: mcp tools')
+  const flags = registerContextInjection(ctx, config, (next) => {
+    const mode = parseMcpLoadingMode(next.mcpLoading)
+    if (mode === mcpLoading) return
+    mcpLoading = mode
+    disposeMcpTools()
+    disposeMcpTools = registerMcpTools(ctx, mode)
+  })
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().claude }))
   claudeInstructionListener(ctx, config, () => flags().claude)
   const ruleConfig = {
@@ -114,9 +128,6 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // (a Loader-presence guard here would skip registration when the service is
   // not yet ready and the client would 404 on every MCP mutation).
   new ClaudeCompatMcp(ctx)
-  // On-demand MCP loading: mcp_list / mcp_load / (mcp_call) / mcp_unload let a
-  // session pull a configured-but-stopped server in instead of running them all.
-  registerMcpTools(ctx, (config.mcpLoading ?? 'dynamic') as McpLoadingMode)
 }
 
 

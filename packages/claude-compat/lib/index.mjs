@@ -977,7 +977,8 @@ const CONTEXT_INJECTION_SCHEMA = z.object({
 	claude: z.boolean().default(true),
 	codex: z.boolean().default(true),
 	systemPrompt: z.string().default(""),
-	mcpDescriptions: z.dict(String).default({})
+	mcpDescriptions: z.dict(String).default({}),
+	mcpLoading: z.string().default("dynamic")
 });
 /**
 * Register the `context-injection` namespace and return a live reader.
@@ -991,12 +992,13 @@ const CONTEXT_INJECTION_SCHEMA = z.object({
 * @param config - composition defaults for the two toggles.
 * @returns a thunk returning the current flags.
 */
-function registerContextInjection(ctx, config = {}) {
+function registerContextInjection(ctx, config = {}, onCommitted) {
 	const base = {
 		claude: config.claude ?? true,
 		codex: config.codex ?? true,
 		systemPrompt: "",
-		mcpDescriptions: {}
+		mcpDescriptions: {},
+		mcpLoading: config.mcpLoading ?? "dynamic"
 	};
 	let source = () => ({ ...base });
 	ctx.inject(["settings"], (settingsCtx) => {
@@ -1009,6 +1011,7 @@ function registerContextInjection(ctx, config = {}) {
 			source = () => ({ ...scope.get() });
 			scope.watch((next) => {
 				source = () => ({ ...next });
+				onCommitted?.({ ...next });
 			});
 		} catch {}
 	});
@@ -1870,6 +1873,22 @@ function conflict(target, entryId, serverName, reason) {
 }
 //#endregion
 //#region src/lazy-mcp.ts
+/** Every {@link McpLoadingMode}, used to validate the persisted setting. */
+const MCP_LOADING_MODES = [
+	"eager",
+	"dynamic",
+	"lazy"
+];
+/**
+* Narrow one stored `mcpLoading` value. The settings document is a durable,
+* user-editable file, so an unknown value falls back to `dynamic` instead of
+* failing the commit that carried it.
+* @param value - raw value read from the settings namespace or the plugin config.
+* @returns the matching mode, or `dynamic` when nothing matches.
+*/
+function parseMcpLoadingMode(value) {
+	return MCP_LOADING_MODES.includes(value) ? value : "dynamic";
+}
 /** The last `:`-separated segment of a loader-qualified row id. */
 function leafId(id) {
 	const separator = id.lastIndexOf(":");
@@ -1985,14 +2004,19 @@ const SERVER_ROW_SCHEMA = {
 * Register the on-demand MCP tools in one composition scope.
 * @param ctx - scope the tools belong to (a preset row's context).
 * @param mode - how a loaded server reaches the model.
+* @returns a disposer that unregisters every tool and stops every server this
+*   registration started. `eager` registers nothing, so its disposer is a no-op.
 */
 function registerMcpTools(ctx, mode) {
-	if (mode !== "eager" && mode !== "dynamic" && mode !== "lazy") throw new Error(`claude-compat: unknown mcpLoading ${JSON.stringify(String(mode))} (expected eager | dynamic | lazy)`);
-	if (mode === "eager") return;
 	const tools = ctx.get("tools");
-	if (tools === void 0) return;
+	if (tools === void 0 || mode === "eager") return () => {};
 	/** Loaded servers keyed by agent id, then serverName. */
 	const mounted = /* @__PURE__ */ new Map();
+	/** Live tool registrations, undone by the returned disposer. */
+	const registrations = [];
+	const register = (definition) => {
+		registrations.push(tools.register(definition));
+	};
 	const loadedFor = (agentId) => {
 		const existing = mounted.get(agentId);
 		if (existing !== void 0) return existing;
@@ -2006,8 +2030,7 @@ function registerMcpTools(ctx, mode) {
 		mounted.clear();
 		await Promise.allSettled(pending);
 	};
-	ctx.effect(() => () => stopAll().then(() => void 0), "claude-compat: mcp tools teardown");
-	ctx.effect(() => tools.register(defineTool({
+	register(defineTool({
 		name: "mcp_list",
 		description: "List the MCP servers configured for this deployment, their scope, and whether each is running. Servers that are configured but not running can be started on demand with `mcp_load`; load only what you need, because a running server costs prompt tokens.",
 		parameters: {},
@@ -2029,8 +2052,8 @@ function registerMcpTools(ctx, mode) {
 				loaded: row.enabled || running?.has(row.serverName) === true
 			}));
 		}
-	})), "claude-compat: mcp_list");
-	ctx.effect(() => tools.register(defineTool({
+	}));
+	register(defineTool({
 		name: "mcp_load",
 		description: mode === "lazy" ? "Start one configured but not-running MCP server for THIS session and return its tools. Call the tools you need afterwards with `mcp_call`, passing the server name and tool name from this result." : "Start one configured but not-running MCP server for THIS session and add its tools to the request. Use `mcp_list` first to see the available names.",
 		parameters: { server: {
@@ -2122,8 +2145,8 @@ function registerMcpTools(ctx, mode) {
 				}))
 			};
 		}
-	})), "claude-compat: mcp_load");
-	if (mode === "lazy") ctx.effect(() => tools.register(defineTool({
+	}));
+	if (mode === "lazy") register(defineTool({
 		name: "mcp_call",
 		description: "Call one tool of an MCP server that `mcp_load` started for THIS session. Use the server and tool names from the mcp_load result; pass the tool arguments exactly as that result described them.",
 		parameters: {
@@ -2189,8 +2212,8 @@ function registerMcpTools(ctx, mode) {
 				isError: result?.isError === true
 			};
 		}
-	})), "claude-compat: mcp_call");
-	ctx.effect(() => tools.register(defineTool({
+	}));
+	register(defineTool({
 		name: "mcp_unload",
 		description: "Stop an MCP server that `mcp_load` started for THIS session and release it again. Use it when you are done with a server, to keep the prompt small.",
 		parameters: { server: {
@@ -2234,7 +2257,12 @@ function registerMcpTools(ctx, mode) {
 				stopped: true
 			};
 		}
-	})), "claude-compat: mcp_unload");
+	}));
+	return () => {
+		for (const dispose of [...registrations].reverse()) dispose();
+		registrations.length = 0;
+		stopAll();
+	};
 }
 /** One MCP tool projected onto the model-facing shape. */
 function lazyTool(tool) {
@@ -2297,7 +2325,18 @@ const Config = z.object({
 * the `context-injection` namespace, and the `/btw` command.
 */
 async function apply(ctx, config = {}) {
-	const flags = registerContextInjection(ctx, config);
+	let mcpLoading = parseMcpLoadingMode(config.mcpLoading);
+	let disposeMcpTools = registerMcpTools(ctx, mcpLoading);
+	ctx.effect(() => () => {
+		disposeMcpTools();
+	}, "claude-compat: mcp tools");
+	const flags = registerContextInjection(ctx, config, (next) => {
+		const mode = parseMcpLoadingMode(next.mcpLoading);
+		if (mode === mcpLoading) return;
+		mcpLoading = mode;
+		disposeMcpTools();
+		disposeMcpTools = registerMcpTools(ctx, mode);
+	});
 	ctx.skills.registerProvider((control) => new ClaudeCodeSkillProvider(ctx, control, {
 		...config,
 		enabled: () => flags().claude
@@ -2326,7 +2365,6 @@ async function apply(ctx, config = {}) {
 		provider: config.provider
 	});
 	new ClaudeCompatMcp(ctx);
-	registerMcpTools(ctx, config.mcpLoading ?? "dynamic");
 }
 //#endregion
-export { ClaudeCompatMcp, Config, apply, assertServerName, inject, mcpEntryConfig, name, specFromEntryConfig };
+export { ClaudeCompatMcp, Config, MCP_LOADING_MODES, apply, assertServerName, inject, mcpEntryConfig, name, parseMcpLoadingMode, registerMcpTools, specFromEntryConfig };

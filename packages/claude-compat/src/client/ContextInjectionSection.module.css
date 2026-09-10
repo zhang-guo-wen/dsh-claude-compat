@@ -167,6 +167,71 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.mcpToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---- MCP loading mode ---- */
+.modeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.modeGroup {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modeOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modeOption:hover:not(:disabled) {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.modeOption:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.modeOption:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modeOptionActive {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-state-business-primary);
+}
+
+.modeName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modeDesc {
+  font-size: 11.5px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .mcpList {
   display: flex;
   flex-direction: column;

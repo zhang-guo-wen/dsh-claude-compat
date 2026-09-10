@@ -73,7 +73,8 @@ await mount?.tree.refresh?.()
 
 ### 延迟加载(src/lazy-mcp.ts)
 
-**加载方式(`mcpLoading`)是 host 插件的 `Config`**,不是 preset 行 —— 见下面的坑。三种取值:
+**加载方式(`mcpLoading`)是 `context-injection` 用户设置**(默认值取自 host 插件的 `Config`)**+ UI 三选一**,
+不是 preset 行 —— 见下面的坑。三种取值:
 
 - `eager`:不注册按需工具。
 - `dynamic`(默认):`mcp_load` 把 mcp-client 挂进**调用方 agent 的作用域**,原生注册工具。
@@ -92,8 +93,13 @@ await mount?.tree.refresh?.()
 
 **坑(实测):不要把注册放在 preset 作用域。** 曾把按需工具做成 preset 行(`inject: ['tools']`,在 preset 的
 standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂一次**(MCP 子进程反复重启)。
-撤掉该行即恢复。所以开关落在 **host 平面**(插件的 cordis.yml `config.mcpLoading`),语义是"**重启后对所有会话生效**";
-要做"只对新会话生效"需要另找机制(例如放一个 **disabled 的配置载体行** 让 host 读,而不是真的挂载它)。
+撤掉该行即恢复。所以注册落在 **host 平面**(插件 `apply` 时的 root ctx):`ctx.effect` 收口。
+
+模式是**活的用户设置**:`registerContextInjection(ctx, config, onCommitted)` 把提交后的 flags 交给 host,
+`onCommitted` 里先 `dispose()` 掉旧注册(连带停掉它启动的服务器)再按新模式注册 —— 交换对**所有会话的下一次
+请求**生效。`parseMcpLoadingMode` 把无法识别的存量值收敛回 `dynamic`(设置文档是用户可编辑的,不能因为一个
+拼错的值让提交失败)。UI 侧是 `ContextInjectionSection.tsx` 的 `McpLoadingPicker`(三个 radio),
+读写 `context-injection` 的 `mcpLoading` 字段。
 
 ## MCP JSON 兼容
 

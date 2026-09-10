@@ -70,13 +70,24 @@ export interface McpServer {
   fiberPhase: McpPhase
 }
 
-/** The two master toggles, the user system prompt, and the MCP description map. */
+/** The two master toggles, the user system prompt, the MCP description map, and the MCP loading mode. */
 export interface ContextInjectionFlags {
   claude: boolean
   codex: boolean
   systemPrompt: string
   mcpDescriptions: Record<string, string>
+  /** `eager`, `dynamic` or `lazy`; see {@link McpLoadingOption}. */
+  mcpLoading: string
 }
+
+/**
+ * One MCP loading mode the section offers. The Host narrows an unknown stored
+ * value back to `dynamic`, so the editor only ever shows these three.
+ */
+export type McpLoadingOption = 'eager' | 'dynamic' | 'lazy'
+
+/** The MCP loading modes in display order. */
+export const MCP_LOADING_OPTIONS: readonly McpLoadingOption[] = ['eager', 'dynamic', 'lazy']
 
 /** One agent preset the MCP editor can target. */
 export interface McpPresetOption {
@@ -109,6 +120,8 @@ export interface ContextInjectionSectionState {
   systemPrompt: string
   /** Plugin-owned MCP row descriptions keyed by {@link mcpDescriptionKey}. */
   mcpDescriptions: Record<string, string>
+  /** How MCP servers reach the model; one of {@link MCP_LOADING_OPTIONS}. */
+  mcpLoading: string
 }
 
 /** Registration-side face for the section. */
@@ -123,6 +136,8 @@ export interface ContextInjectionSectionFace {
   updateSystemPrompt: (value: string) => void
   /** Persist one MCP row's description. */
   updateMcpDescription: (key: string, description: string) => void
+  /** Persist the MCP loading mode the user picked. */
+  setMcpLoading: (mode: McpLoadingOption) => void
   /** Add one MCP row through the Claude-compatible Host Remote. */
   addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
   /** Edit one MCP row through the Claude-compatible Host Remote. */
@@ -206,6 +221,7 @@ export class ContextInjectionController {
       toggle: (name) => { this.toggle(name) },
       updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
       updateMcpDescription: (key, description) => { this.updateMcpDescription(key, description) },
+      setMcpLoading: (mode) => { this.setMcpLoading(mode) },
       addMcp: this.authoring.addMcp,
       editMcp: this.authoring.editMcp,
       disableMcp: this.authoring.disableMcp,
@@ -239,6 +255,13 @@ export class ContextInjectionController {
     void this.scope.set('mcpDescriptions', next)
   }
 
+  private setMcpLoading(mode: McpLoadingOption): void {
+    const snapshot = this.scope.getSnapshot()
+    if (snapshot.status !== 'ready' || !snapshot.writable) return
+    if (snapshot.value?.mcpLoading === mode) return
+    void this.scope.set('mcpLoading', mode)
+  }
+
   private projection(): ContextInjectionSectionState {
     const snapshot = this.scope.getSnapshot()
     return {
@@ -248,6 +271,7 @@ export class ContextInjectionController {
       codex: snapshot.value?.codex ?? true,
       systemPrompt: snapshot.value?.systemPrompt ?? '',
       mcpDescriptions: snapshot.value?.mcpDescriptions ?? {},
+      mcpLoading: snapshot.value?.mcpLoading ?? 'dynamic',
     }
   }
 

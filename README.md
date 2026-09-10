@@ -40,15 +40,15 @@ The built `lib/` is committed, so the repository installs and runs directly — 
 
 ### From the git repository (recommended)
 
-Install a **release tag** (`v0.1.1-alpha.1`) rather than the default branch, so a later
+Install a **release tag** (`v0.1.2-alpha.1`) rather than the default branch, so a later
 work-in-progress commit on `master` is not picked up:
 
 ```sh
 # over HTTPS (public repo)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
 
 # or over SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.1-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
 ```
 
 The spec has two parts: `#<ref>` pins a **tag / commit / branch**, and
@@ -142,21 +142,25 @@ when you actually need a server.
 
 ### Choosing the loading mode
 
-`mcpLoading` on the plugin's config row selects how a stopped server reaches the model:
+**Settings → Claude Compat → MCP management → MCP loading** selects, out of three, how a stopped
+server reaches the model:
 
 | Mode | Behavior |
 |---|---|
-| `eager` | No on-demand tools; every enabled row mounts at preset mount |
-| `dynamic` (default) | `mcp_load` mounts the server into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
-| `lazy` | `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas; the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
+| Load all (`eager`) | No on-demand tools; every enabled row mounts at preset mount |
+| Dynamic insert (`dynamic`, default) | `mcp_load` mounts the server into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
+| Lazy (`lazy`) | `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas; the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
 
 ```yaml
 - name: '@zhang-guo-wen/dsh-claude-compat'
   config:
-    mcpLoading: lazy
+    mcpLoading: lazy   # only while the user document has no such entry
 ```
 
-The mode is read when the host starts, so changing it takes effect on the next `dsh web` restart.
+The choice is stored in the user's `context-injection` settings namespace (`mcpLoading` in
+`~/.dsh/settings.yaml`) and **swaps the tool set as soon as it commits**, from the next request on in
+every session. The plugin's `config.mcpLoading` only supplies the default while the user document
+has no entry yet.
 
 ## Claude Code / Codex compatibility
 

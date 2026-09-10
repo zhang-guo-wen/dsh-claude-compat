@@ -42,6 +42,12 @@ export interface ContextInjectionFlags {
    * metadata; never reaches the model or the config file.
    */
   mcpDescriptions: Record<string, string>
+  /**
+   * How MCP servers load: `eager` (every enabled row mounts at preset mount),
+   * `dynamic` (on-demand tools mount a server into the calling session) or
+   * `lazy` (on-demand tools talk to the server without registering anything).
+   */
+  mcpLoading: string
 }
 
 /** Schema served to settings clients for the injection preference. */
@@ -50,6 +56,7 @@ export const CONTEXT_INJECTION_SCHEMA: Schema<ContextInjectionFlags> = z.object(
   codex: z.boolean().default(true),
   systemPrompt: z.string().default(''),
   mcpDescriptions: z.dict(String).default({}),
+  mcpLoading: z.string().default('dynamic'),
 })
 
 /** Composition-layer defaults for the two toggles when a plugin uses them. */
@@ -58,6 +65,8 @@ export interface ContextInjectionConfig {
   claude?: boolean
   /** Initial Codex state inherited when the user document does not override it. */
   codex?: boolean
+  /** Initial MCP loading mode inherited when the user document does not override it. */
+  mcpLoading?: string
 }
 
 /** A live {@link ContextInjectionFlags} reader (detached snapshots). */
@@ -102,12 +111,14 @@ interface SettingsProviderLike {
 export function registerContextInjection(
   ctx: Context,
   config: ContextInjectionConfig = {},
+  onCommitted?: (flags: ContextInjectionFlags) => void,
 ): InjectionFlagsSource {
   const base: ContextInjectionFlags = {
     claude: config.claude ?? true,
     codex: config.codex ?? true,
     systemPrompt: '',
     mcpDescriptions: {},
+    mcpLoading: config.mcpLoading ?? 'dynamic',
   }
   let source: InjectionFlagsSource = () => ({ ...base })
   ctx.inject(['settings'], (settingsCtx) => {
@@ -119,7 +130,10 @@ export function registerContextInjection(
         { base, applies: 'live' },
       )
       source = () => ({ ...scope.get() })
-      scope.watch((next) => { source = () => ({ ...next }) })
+      scope.watch((next) => {
+        source = () => ({ ...next })
+        onCommitted?.({ ...next })
+      })
     } catch {
       // Another owner already registered this namespace; keep our base.
     }

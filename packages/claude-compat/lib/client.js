@@ -9,7 +9,7 @@ window.__ModuleLoader__.load({
 		let react_jsx_runtime = require("react/jsx-runtime");
 		let _deepseek_ai_dsh_client_store = require("@deepseek-ai/dsh-client-store");
 		//#region \0dsh-css:C:\02-codespace\dsh-claude-compat\packages\claude-compat\src\client\ContextInjectionSection.module.css.mjs
-		const css = "._7SvOdG_section{flex-direction:column;gap:16px;width:100%;max-width:720px;display:flex}._7SvOdG_tabs{background:var(--dsw-alias-bg-module-platform);border-radius:12px;align-self:flex-start;align-items:center;gap:2px;padding:3px;display:inline-flex}._7SvOdG_tab{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:0;border-radius:9px;padding:7px 16px;font-size:13px;line-height:20px}._7SvOdG_tab:hover{color:var(--dsw-alias-label-secondary)}._7SvOdG_tab:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}._7SvOdG_tab[aria-selected=true]{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);box-shadow:var(--dsw-elevation-stroke);font-weight:600}._7SvOdG_panel{flex-direction:column;gap:16px;display:flex}._7SvOdG_intro{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere;white-space:pre-line;border-radius:12px;margin:0;padding:14px 16px;font-size:13px;line-height:22px}._7SvOdG_field{flex-direction:column;gap:7px;display:flex}._7SvOdG_fieldLabel{font-size:13px;font-weight:600}._7SvOdG_fieldHint{color:var(--dsw-alias-label-tertiary);font-size:12px}._7SvOdG_promptArea{box-sizing:border-box;resize:vertical;border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1);width:100%;min-height:132px;color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);border-radius:12px;outline:none;padding:12px 14px;font-size:12.5px;line-height:19px}._7SvOdG_promptArea::placeholder{color:var(--dsw-alias-label-tertiary)}._7SvOdG_promptArea:focus{border-color:var(--dsw-alias-state-business-primary);box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent)}._7SvOdG_promptArea:disabled{opacity:.6;cursor:not-allowed}._7SvOdG_switchSectionLabel{text-transform:uppercase;letter-spacing:.06em;color:var(--dsw-alias-label-tertiary);margin:4px 0 0;font-size:11px;font-weight:600}._7SvOdG_switchRow{border-bottom:.5px solid var(--dsw-alias-border-l2);justify-content:space-between;align-items:center;gap:16px;padding:12px 0;display:flex}._7SvOdG_switchRow:last-child{border-bottom:0}._7SvOdG_switchText{flex-direction:column;gap:2px;min-width:0;display:flex}._7SvOdG_switchLabel{font-size:13px;font-weight:600}._7SvOdG_switchDesc{color:var(--dsw-alias-label-secondary);font-size:12px}._7SvOdG_switchFiles{color:var(--dsw-alias-label-tertiary);font-size:11px;font-family:var(--ds-font-family-code);overflow-wrap:anywhere;margin-top:2px}._7SvOdG_mcpSub{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12.5px;line-height:20px}._7SvOdG_mcpList{flex-direction:column;gap:10px;display:flex}._7SvOdG_mcpRow{background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-stroke);border-radius:12px;justify-content:space-between;align-items:center;gap:14px;padding:12px 14px;display:flex}._7SvOdG_mcpMain{flex-direction:column;gap:3px;min-width:0;display:flex}._7SvOdG_mcpName{font-size:14px;font-weight:600;font-family:var(--ds-font-family-code)}._7SvOdG_mcpDesc{color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere;background:0 0;border:0;outline:none;padding:0;font-family:inherit;font-size:12px;line-height:18px}._7SvOdG_mcpDesc::placeholder{color:var(--dsw-alias-label-tertiary);opacity:.7}._7SvOdG_mcpDesc:focus{color:var(--dsw-alias-label-primary);border-bottom:1px solid var(--dsw-alias-state-business-primary)}._7SvOdG_mcpRight{flex:none;align-items:center;gap:10px;display:inline-flex}._7SvOdG_badge{corner-shape:round;border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);white-space:nowrap;border-radius:999px;padding:2px 8px;font-size:11px}._7SvOdG_status{color:var(--dsw-alias-label-secondary);align-items:center;gap:6px;font-size:12px;display:inline-flex}._7SvOdG_mcpActions{align-items:center;gap:8px;display:inline-flex}._7SvOdG_mcpAction{appearance:none;border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);cursor:pointer;white-space:nowrap;background:0 0;border-radius:6px;padding:4px 10px;font-size:12px}._7SvOdG_mcpAction:hover{background:var(--dsw-alias-bg-layer-2)}._7SvOdG_mcpAction:disabled{opacity:.5;cursor:not-allowed}._7SvOdG_mcpStatus{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}._7SvOdG_mcpFailure{color:var(--dsw-alias-state-error-primary);align-items:center;gap:10px;display:flex}._7SvOdG_mcpFailure p{margin:0;font-size:13px}._7SvOdG_mcpRetry{border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer;background:0 0;border-radius:6px;padding:4px 10px;font-size:12px}._7SvOdG_mcpRetry:hover{background:var(--dsw-alias-interactive-bg-hover)}._7SvOdG_empty,._7SvOdG_unavailable{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}._7SvOdG_mcpForm{flex-direction:column;gap:12px;display:flex}._7SvOdG_formField{flex-direction:column;gap:6px;display:flex}._7SvOdG_formLabel{color:var(--dsw-alias-label-secondary);font-size:12px}._7SvOdG_formSelect{border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);width:100%;color:var(--dsw-alias-label-primary);border-radius:8px;padding:8px 10px;font-size:13px}._7SvOdG_formSelect:focus{border-color:var(--dsw-alias-state-business-primary);outline:none}._7SvOdG_formJson{width:100%;min-height:220px;font-family:var(--ds-font-family-code);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);resize:vertical;white-space:pre;border-radius:8px;padding:10px 12px;font-size:12px;line-height:18px;overflow:auto}._7SvOdG_formJson:focus{border-color:var(--dsw-alias-state-business-primary);outline:none}._7SvOdG_formError{color:var(--dsw-alias-state-danger,#e5484d);margin:0;font-size:12px}._7SvOdG_mcpNotice{color:var(--dsw-alias-state-success,#2f9e44);margin:0;font-size:12px}._7SvOdG_mcpActionError{color:var(--dsw-alias-state-danger,#e5484d);margin:0;font-size:12px}";
+		const css = "._7SvOdG_section{flex-direction:column;gap:16px;width:100%;max-width:720px;display:flex}._7SvOdG_tabs{background:var(--dsw-alias-bg-module-platform);border-radius:12px;align-self:flex-start;align-items:center;gap:2px;padding:3px;display:inline-flex}._7SvOdG_tab{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:0;border-radius:9px;padding:7px 16px;font-size:13px;line-height:20px}._7SvOdG_tab:hover{color:var(--dsw-alias-label-secondary)}._7SvOdG_tab:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}._7SvOdG_tab[aria-selected=true]{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);box-shadow:var(--dsw-elevation-stroke);font-weight:600}._7SvOdG_panel{flex-direction:column;gap:16px;display:flex}._7SvOdG_intro{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere;white-space:pre-line;border-radius:12px;margin:0;padding:14px 16px;font-size:13px;line-height:22px}._7SvOdG_field{flex-direction:column;gap:7px;display:flex}._7SvOdG_fieldLabel{font-size:13px;font-weight:600}._7SvOdG_fieldHint{color:var(--dsw-alias-label-tertiary);font-size:12px}._7SvOdG_promptArea{box-sizing:border-box;resize:vertical;border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1);width:100%;min-height:132px;color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);border-radius:12px;outline:none;padding:12px 14px;font-size:12.5px;line-height:19px}._7SvOdG_promptArea::placeholder{color:var(--dsw-alias-label-tertiary)}._7SvOdG_promptArea:focus{border-color:var(--dsw-alias-state-business-primary);box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent)}._7SvOdG_promptArea:disabled{opacity:.6;cursor:not-allowed}._7SvOdG_switchSectionLabel{text-transform:uppercase;letter-spacing:.06em;color:var(--dsw-alias-label-tertiary);margin:4px 0 0;font-size:11px;font-weight:600}._7SvOdG_switchRow{border-bottom:.5px solid var(--dsw-alias-border-l2);justify-content:space-between;align-items:center;gap:16px;padding:12px 0;display:flex}._7SvOdG_switchRow:last-child{border-bottom:0}._7SvOdG_switchText{flex-direction:column;gap:2px;min-width:0;display:flex}._7SvOdG_switchLabel{font-size:13px;font-weight:600}._7SvOdG_switchDesc{color:var(--dsw-alias-label-secondary);font-size:12px}._7SvOdG_switchFiles{color:var(--dsw-alias-label-tertiary);font-size:11px;font-family:var(--ds-font-family-code);overflow-wrap:anywhere;margin-top:2px}._7SvOdG_mcpSub{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12.5px;line-height:20px}._7SvOdG_mcpToolbar{justify-content:space-between;align-items:center;gap:12px;display:flex}._7SvOdG_modeBlock{flex-direction:column;gap:7px;display:flex}._7SvOdG_modeGroup{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;display:grid}._7SvOdG_modeOption{border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer;border-radius:12px;flex-direction:column;align-items:flex-start;gap:4px;padding:10px 12px;display:flex}._7SvOdG_modeOption:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}._7SvOdG_modeOption:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}._7SvOdG_modeOption:disabled{opacity:.55;cursor:not-allowed}._7SvOdG_modeOptionActive{border-color:var(--dsw-alias-state-business-primary);box-shadow:inset 0 0 0 1px var(--dsw-alias-state-business-primary)}._7SvOdG_modeName{font-size:13px;font-weight:600}._7SvOdG_modeDesc{color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:17px}._7SvOdG_mcpList{flex-direction:column;gap:10px;display:flex}._7SvOdG_mcpRow{background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-stroke);border-radius:12px;justify-content:space-between;align-items:center;gap:14px;padding:12px 14px;display:flex}._7SvOdG_mcpMain{flex-direction:column;gap:3px;min-width:0;display:flex}._7SvOdG_mcpName{font-size:14px;font-weight:600;font-family:var(--ds-font-family-code)}._7SvOdG_mcpDesc{color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere;background:0 0;border:0;outline:none;padding:0;font-family:inherit;font-size:12px;line-height:18px}._7SvOdG_mcpDesc::placeholder{color:var(--dsw-alias-label-tertiary);opacity:.7}._7SvOdG_mcpDesc:focus{color:var(--dsw-alias-label-primary);border-bottom:1px solid var(--dsw-alias-state-business-primary)}._7SvOdG_mcpRight{flex:none;align-items:center;gap:10px;display:inline-flex}._7SvOdG_badge{corner-shape:round;border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);white-space:nowrap;border-radius:999px;padding:2px 8px;font-size:11px}._7SvOdG_status{color:var(--dsw-alias-label-secondary);align-items:center;gap:6px;font-size:12px;display:inline-flex}._7SvOdG_mcpActions{align-items:center;gap:8px;display:inline-flex}._7SvOdG_mcpAction{appearance:none;border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);cursor:pointer;white-space:nowrap;background:0 0;border-radius:6px;padding:4px 10px;font-size:12px}._7SvOdG_mcpAction:hover{background:var(--dsw-alias-bg-layer-2)}._7SvOdG_mcpAction:disabled{opacity:.5;cursor:not-allowed}._7SvOdG_mcpStatus{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}._7SvOdG_mcpFailure{color:var(--dsw-alias-state-error-primary);align-items:center;gap:10px;display:flex}._7SvOdG_mcpFailure p{margin:0;font-size:13px}._7SvOdG_mcpRetry{border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer;background:0 0;border-radius:6px;padding:4px 10px;font-size:12px}._7SvOdG_mcpRetry:hover{background:var(--dsw-alias-interactive-bg-hover)}._7SvOdG_empty,._7SvOdG_unavailable{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}._7SvOdG_mcpForm{flex-direction:column;gap:12px;display:flex}._7SvOdG_formField{flex-direction:column;gap:6px;display:flex}._7SvOdG_formLabel{color:var(--dsw-alias-label-secondary);font-size:12px}._7SvOdG_formSelect{border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);width:100%;color:var(--dsw-alias-label-primary);border-radius:8px;padding:8px 10px;font-size:13px}._7SvOdG_formSelect:focus{border-color:var(--dsw-alias-state-business-primary);outline:none}._7SvOdG_formJson{width:100%;min-height:220px;font-family:var(--ds-font-family-code);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);resize:vertical;white-space:pre;border-radius:8px;padding:10px 12px;font-size:12px;line-height:18px;overflow:auto}._7SvOdG_formJson:focus{border-color:var(--dsw-alias-state-business-primary);outline:none}._7SvOdG_formError{color:var(--dsw-alias-state-danger,#e5484d);margin:0;font-size:12px}._7SvOdG_mcpNotice{color:var(--dsw-alias-state-success,#2f9e44);margin:0;font-size:12px}._7SvOdG_mcpActionError{color:var(--dsw-alias-state-danger,#e5484d);margin:0;font-size:12px}";
 		const tagId = "@zhang-guo-wen/dsh-claude-compat/ContextInjectionSection.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -18,45 +18,52 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var ContextInjectionSection_module_css_default = {
-			"field": "_7SvOdG_field",
-			"mcpActionError": "_7SvOdG_mcpActionError",
-			"mcpName": "_7SvOdG_mcpName",
-			"mcpStatus": "_7SvOdG_mcpStatus",
-			"unavailable": "_7SvOdG_unavailable",
-			"promptArea": "_7SvOdG_promptArea",
 			"intro": "_7SvOdG_intro",
-			"mcpList": "_7SvOdG_mcpList",
-			"formLabel": "_7SvOdG_formLabel",
-			"fieldHint": "_7SvOdG_fieldHint",
-			"mcpRow": "_7SvOdG_mcpRow",
-			"mcpDesc": "_7SvOdG_mcpDesc",
-			"switchLabel": "_7SvOdG_switchLabel",
-			"tabs": "_7SvOdG_tabs",
-			"tab": "_7SvOdG_tab",
-			"mcpForm": "_7SvOdG_mcpForm",
-			"mcpNotice": "_7SvOdG_mcpNotice",
-			"mcpActions": "_7SvOdG_mcpActions",
 			"switchSectionLabel": "_7SvOdG_switchSectionLabel",
-			"mcpSub": "_7SvOdG_mcpSub",
-			"switchFiles": "_7SvOdG_switchFiles",
-			"mcpAction": "_7SvOdG_mcpAction",
-			"switchText": "_7SvOdG_switchText",
+			"modeOption": "_7SvOdG_modeOption",
+			"mcpNotice": "_7SvOdG_mcpNotice",
 			"formField": "_7SvOdG_formField",
-			"formSelect": "_7SvOdG_formSelect",
-			"formJson": "_7SvOdG_formJson",
-			"formError": "_7SvOdG_formError",
-			"fieldLabel": "_7SvOdG_fieldLabel",
-			"status": "_7SvOdG_status",
-			"section": "_7SvOdG_section",
-			"switchDesc": "_7SvOdG_switchDesc",
+			"modeDesc": "_7SvOdG_modeDesc",
 			"badge": "_7SvOdG_badge",
-			"switchRow": "_7SvOdG_switchRow",
-			"mcpRight": "_7SvOdG_mcpRight",
+			"mcpDesc": "_7SvOdG_mcpDesc",
+			"tabs": "_7SvOdG_tabs",
+			"promptArea": "_7SvOdG_promptArea",
+			"fieldHint": "_7SvOdG_fieldHint",
+			"status": "_7SvOdG_status",
+			"mcpToolbar": "_7SvOdG_mcpToolbar",
 			"mcpRetry": "_7SvOdG_mcpRetry",
+			"mcpAction": "_7SvOdG_mcpAction",
+			"modeGroup": "_7SvOdG_modeGroup",
+			"mcpName": "_7SvOdG_mcpName",
+			"switchLabel": "_7SvOdG_switchLabel",
+			"tab": "_7SvOdG_tab",
+			"empty": "_7SvOdG_empty",
+			"unavailable": "_7SvOdG_unavailable",
+			"mcpForm": "_7SvOdG_mcpForm",
+			"switchRow": "_7SvOdG_switchRow",
+			"formSelect": "_7SvOdG_formSelect",
+			"fieldLabel": "_7SvOdG_fieldLabel",
+			"formLabel": "_7SvOdG_formLabel",
+			"formError": "_7SvOdG_formError",
+			"modeBlock": "_7SvOdG_modeBlock",
+			"mcpList": "_7SvOdG_mcpList",
+			"switchFiles": "_7SvOdG_switchFiles",
+			"field": "_7SvOdG_field",
 			"panel": "_7SvOdG_panel",
+			"formJson": "_7SvOdG_formJson",
+			"modeOptionActive": "_7SvOdG_modeOptionActive",
+			"mcpSub": "_7SvOdG_mcpSub",
+			"mcpActions": "_7SvOdG_mcpActions",
+			"switchText": "_7SvOdG_switchText",
 			"mcpMain": "_7SvOdG_mcpMain",
+			"section": "_7SvOdG_section",
 			"mcpFailure": "_7SvOdG_mcpFailure",
-			"empty": "_7SvOdG_empty"
+			"mcpActionError": "_7SvOdG_mcpActionError",
+			"modeName": "_7SvOdG_modeName",
+			"mcpStatus": "_7SvOdG_mcpStatus",
+			"mcpRight": "_7SvOdG_mcpRight",
+			"switchDesc": "_7SvOdG_switchDesc",
+			"mcpRow": "_7SvOdG_mcpRow"
 		};
 		//#endregion
 		//#region src/client/McpEditor.tsx
@@ -368,6 +375,12 @@ window.__ModuleLoader__.load({
 			const separator = qualified.lastIndexOf(":");
 			return separator < 0 ? qualified : qualified.slice(separator + 1);
 		}
+		/** The MCP loading modes in display order. */
+		const MCP_LOADING_OPTIONS = [
+			"eager",
+			"dynamic",
+			"lazy"
+		];
 		/**
 		* Project a Host plugin-inventory snapshot onto the MCP roster, keeping every
 		* mcp-client occurrence (global plane plus each preset composition) without
@@ -440,6 +453,9 @@ window.__ModuleLoader__.load({
 					updateMcpDescription: (key, description) => {
 						this.updateMcpDescription(key, description);
 					},
+					setMcpLoading: (mode) => {
+						this.setMcpLoading(mode);
+					},
 					addMcp: this.authoring.addMcp,
 					editMcp: this.authoring.editMcp,
 					disableMcp: this.authoring.disableMcp,
@@ -468,6 +484,12 @@ window.__ModuleLoader__.load({
 				else next[key] = description;
 				this.scope.set("mcpDescriptions", next);
 			}
+			setMcpLoading(mode) {
+				const snapshot = this.scope.getSnapshot();
+				if (snapshot.status !== "ready" || !snapshot.writable) return;
+				if (snapshot.value?.mcpLoading === mode) return;
+				this.scope.set("mcpLoading", mode);
+			}
 			projection() {
 				const snapshot = this.scope.getSnapshot();
 				return {
@@ -476,7 +498,8 @@ window.__ModuleLoader__.load({
 					claude: snapshot.value?.claude ?? true,
 					codex: snapshot.value?.codex ?? true,
 					systemPrompt: snapshot.value?.systemPrompt ?? "",
-					mcpDescriptions: snapshot.value?.mcpDescriptions ?? {}
+					mcpDescriptions: snapshot.value?.mcpDescriptions ?? {},
+					mcpLoading: snapshot.value?.mcpLoading ?? "dynamic"
 				};
 			}
 			publish() {
@@ -512,6 +535,18 @@ window.__ModuleLoader__.load({
 			failed: "error",
 			unloading: "ongoing"
 		};
+		/** MCP loading mode → localized option name. */
+		const MODE_LABEL = {
+			eager: "mcp.mode.eager",
+			dynamic: "mcp.mode.dynamic",
+			lazy: "mcp.mode.lazy"
+		};
+		/** MCP loading mode → localized one-line explanation. */
+		const MODE_DESC = {
+			eager: "mcp.mode.eager.desc",
+			dynamic: "mcp.mode.dynamic.desc",
+			lazy: "mcp.mode.lazy.desc"
+		};
 		/** Resolve one MCP row's displayed status label and dot. */
 		function statusOf(server, t) {
 			if (server.enabled === false) return {
@@ -530,6 +565,53 @@ window.__ModuleLoader__.load({
 				label: t(PHASE_LABEL[server.fiberPhase]),
 				dot: PHASE_DOT[server.fiberPhase]
 			};
+		}
+		/**
+		* The MCP loading mode picker: one radio per mode, each carrying its own
+		* one-line explanation so the trade-off (prompt cost and cache-prefix churn
+		* against tool-binding quality) is readable without leaving the page.
+		*/
+		function McpLoadingPicker({ value, disabled, onPick, t }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: ContextInjectionSection_module_css_default.modeBlock,
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: ContextInjectionSection_module_css_default.fieldLabel,
+						children: t("mcp.mode.title")
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: ContextInjectionSection_module_css_default.fieldHint,
+						children: t("mcp.mode.hint")
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						className: ContextInjectionSection_module_css_default.modeGroup,
+						role: "radiogroup",
+						"aria-label": t("mcp.mode.title"),
+						children: MCP_LOADING_OPTIONS.map((mode) => {
+							const selected = value === mode;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+								type: "button",
+								role: "radio",
+								"aria-checked": selected,
+								"data-mcp-mode": mode,
+								className: selected ? `${ContextInjectionSection_module_css_default.modeOption} ${ContextInjectionSection_module_css_default.modeOptionActive}` : ContextInjectionSection_module_css_default.modeOption,
+								disabled,
+								title: disabled ? t("unavailable") : void 0,
+								onClick: () => {
+									onPick(mode);
+								},
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									className: ContextInjectionSection_module_css_default.modeName,
+									children: t(MODE_LABEL[mode])
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									className: ContextInjectionSection_module_css_default.modeDesc,
+									children: t(MODE_DESC[mode])
+								})]
+							}, mode);
+						})
+					})
+				]
+			});
 		}
 		/** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
 		function McpRow({ server, description, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }) {
@@ -600,7 +682,7 @@ window.__ModuleLoader__.load({
 		}
 		/** The settings section body. */
 		function ContextInjectionSection(props) {
-			const { useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, addMcp, editMcp, disableMcp, describeMcp, mcps, presets } = props;
+			const { useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, mcps, presets } = props;
 			const state = useContextInjection((snapshot) => snapshot);
 			const [activeTab, setActiveTab] = (0, react.useState)("prompt");
 			const [promptDraft, setPromptDraft] = (0, react.useState)(null);
@@ -828,6 +910,16 @@ window.__ModuleLoader__.load({
 					id: "context-injection-mcp",
 					role: "tabpanel",
 					children: [
+						!state.available ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: ContextInjectionSection_module_css_default.unavailable,
+							children: t("unavailable")
+						}) : null,
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)(McpLoadingPicker, {
+							value: state.mcpLoading,
+							disabled,
+							onPick: setMcpLoading,
+							t
+						}),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: ContextInjectionSection_module_css_default.mcpToolbar,
 							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
@@ -940,6 +1032,14 @@ window.__ModuleLoader__.load({
 			"codex.desc": "把项目与全局的 Codex 规则注入会话",
 			"codex.files": "注入：.codex/AGENTS.md、~/.codex/AGENTS.md",
 			"mcp.subtitle": "已加载的 MCP 服务器",
+			"mcp.mode.title": "MCP 加载方式",
+			"mcp.mode.hint": "决定会话把 MCP 服务器放进上下文的方式；切换后从下一次请求开始生效。",
+			"mcp.mode.eager": "全部加载",
+			"mcp.mode.eager.desc": "已启用的 MCP 全部挂载，工具始终在请求里。最省事，但每次请求都要付工具描述的 token。",
+			"mcp.mode.dynamic": "动态插入",
+			"mcp.mode.dynamic.desc": "默认不加载；需要时用 mcp_load 把服务器挂进当前会话。工具列表会变化一次，请求缓存前缀随之中断。",
+			"mcp.mode.lazy": "延迟加载",
+			"mcp.mode.lazy.desc": "默认不加载；需要时用 mcp_load 连接、用 mcp_call 调用。工具列表永不变化，请求缓存前缀不中断。",
 			"mcp.add": "新增 MCP",
 			"mcp.notice.added": "已新增 MCP 服务器",
 			"mcp.notice.saved": "已保存 MCP 服务器",
@@ -1014,6 +1114,14 @@ window.__ModuleLoader__.load({
 			"codex.desc": "Inject project and global Codex rules into the session",
 			"codex.files": "Loads: .codex/AGENTS.md, ~/.codex/AGENTS.md",
 			"mcp.subtitle": "Loaded MCP servers",
+			"mcp.mode.title": "MCP loading",
+			"mcp.mode.hint": "How a session folds MCP servers into context. A change applies from the next request on.",
+			"mcp.mode.eager": "Load all",
+			"mcp.mode.eager.desc": "Every enabled MCP server mounts up front, so its tools are always in the request. Simplest, and you pay the tool descriptions on every request.",
+			"mcp.mode.dynamic": "Dynamic insert",
+			"mcp.mode.dynamic.desc": "Nothing loads by default; mcp_load mounts a server into the calling session. The tool list changes once per load, which breaks the request-cache prefix.",
+			"mcp.mode.lazy": "Lazy",
+			"mcp.mode.lazy.desc": "Nothing loads by default; mcp_load connects and mcp_call invokes. The tool list never changes, so the request-cache prefix survives.",
 			"mcp.add": "Add MCP",
 			"mcp.notice.added": "MCP server added",
 			"mcp.notice.saved": "MCP server saved",
