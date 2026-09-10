@@ -141,6 +141,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
   const [editorBusy, setEditorBusy] = useState(false)
   const [editorError, setEditorError] = useState<string | null>(null)
   const [mcpActionError, setMcpActionError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const disabled = !state.available || !state.writable
   const promptValue = promptDraft ?? state.systemPrompt
 
@@ -163,12 +164,14 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
     setEditor({ mode: 'add', server: undefined, open: true })
     setEditorError(null)
     setMcpActionError(null)
+    setNotice(null)
   }
 
   const openEdit = (server: McpServer): void => {
     setEditor({ mode: 'edit', server, open: true })
     setEditorError(null)
     setMcpActionError(null)
+    setNotice(null)
   }
 
   const closeEditor = (): void => {
@@ -189,6 +192,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
       if (editor.mode === 'add') await addMcp(request as AddMcpRequest)
       else await editMcp(request as EditMcpRequest)
       setEditor({ mode: editor.mode, server: undefined, open: false })
+      setNotice(editor.mode === 'add' ? t('mcp.notice.added') : t('mcp.notice.saved'))
       refreshMcps()
     } catch (cause) {
       setEditorError(cause instanceof Error ? cause.message : String(cause))
@@ -206,6 +210,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
     setMcpActionError(null)
     try {
       await disableMcp({ target, entryId: server.entryId, disabled: !enabled })
+      setNotice(enabled ? t('mcp.notice.enabled') : t('mcp.notice.disabled'))
       refreshMcps()
     } catch (cause) {
       setMcpActionError(cause instanceof Error ? cause.message : String(cause))
@@ -322,6 +327,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
             </div>
           ) : null}
           {mcpActionError !== null ? <p className={css.mcpActionError} role="alert">{mcpActionError}</p> : null}
+          {notice !== null ? <p className={css.mcpNotice} role="status">{notice}</p> : null}
           <McpEditor
             open={editor.open}
             mode={editor.mode}

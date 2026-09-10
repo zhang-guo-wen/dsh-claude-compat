@@ -374,3 +374,15 @@
   font-size: 12px;
   color: var(--dsw-alias-state-danger, #e5484d);
 }
+
+.mcpNotice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-success, #2f9e44);
+}
+
+.mcpActionError {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-danger, #e5484d);
+}
