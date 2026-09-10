@@ -5,6 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Entry, EntryOptions, EntryTree } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-agent-presets'
+import { livePresetMounts } from '@deepseek-ai/dsh-agent-presets'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   entryIds,
@@ -277,19 +278,26 @@ export class ClaudeCompatMcp extends TypertRemoteService {
   }
 
   /**
-   * Recompose one preset's standing mount so a just-written composition file is
-   * live without a restart. `agentPresets.standingKeyFor` re-stamps the mount
-   * and starts a new generation when the file's mtime/size changed. A failure
-   * is logged rather than thrown so a committed file write still reports success.
+   * Apply a just-written preset composition to its live standing mount.
+   *
+   * Re-reads the file through the mount's own `Include` tree (`refresh()`),
+   * which diffs child entries and mounts/unmounts only what changed. A full
+   * `standingKeyFor` recompose would start a new generation and remount every
+   * row — restarting every MCP child process in the preset — so the targeted
+   * refresh is the difference between a sub-second toggle and several seconds.
+   * A preset that is not mounted has nothing live to update; a failure is
+   * logged rather than thrown so a committed file write still reports success.
    * @param agentPreset - preset id whose composition was just written.
    */
   private async refreshPreset(agentPreset: string): Promise<void> {
-    const presets = this.ctx.get('agentPresets') as { standingKeyFor(id?: string): Promise<unknown> } | undefined
-    if (presets === undefined) return
     try {
-      await presets.standingKeyFor(agentPreset)
+      const mount = livePresetMounts().filter(candidate => candidate.presetId === agentPreset).at(-1)
+      const refresh = (mount?.tree as { refresh?: () => Promise<void> } | undefined)?.refresh
+      if (refresh !== undefined && mount !== undefined) {
+        await refresh.call(mount.tree)
+      }
     } catch (error) {
-      this.warnPatch(`claude-compat: preset "${agentPreset}" recompose failed after edit: ${String(error)}`)
+      this.warnPatch(`claude-compat: preset "${agentPreset}" refresh failed after edit: ${String(error)}`)
     }
   }
 
