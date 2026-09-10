@@ -31,7 +31,7 @@
     }
   },
   "files": [
-    "lib/index.mjs",
+    "lib/*.mjs",
     "lib/client.js",
     "cordis.patch.yml",
     "LICENSE",

@@ -140,6 +140,24 @@ The mount is agent-scoped: a server one session loads never appears in another. 
 trade-off as Claude Code's tool search — you pay one extra round trip, and the loaded schema, only
 when you actually need a server.
 
+### Choosing the loading mode
+
+`mcpLoading` on the plugin's config row selects how a stopped server reaches the model:
+
+| Mode | Behavior |
+|---|---|
+| `eager` | No on-demand tools; every enabled row mounts at preset mount |
+| `dynamic` (default) | `mcp_load` mounts the server into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
+| `lazy` | `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas; the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
+
+```yaml
+- name: '@zhang-guo-wen/dsh-claude-compat'
+  config:
+    mcpLoading: lazy
+```
+
+The mode is read when the host starts, so changing it takes effect on the next `dsh web` restart.
+
 ## Claude Code / Codex compatibility
 
 ### Skills

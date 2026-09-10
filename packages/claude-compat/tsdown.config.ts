@@ -38,7 +38,9 @@ export default defineConfig({
   outDir: 'lib',
   platform: 'node',
   dts: false,
-  deps: { neverBundle: [/^@deepseek-ai\//] },
+  // The MCP SDK is resolved from the harness at runtime, so it stays external
+  // like every @deepseek-ai package rather than being bundled here.
+  deps: { neverBundle: [/^@deepseek-ai\//, /^@modelcontextprotocol\//] },
   plugins: [lowerDecorators()],
   clean: true,
 })

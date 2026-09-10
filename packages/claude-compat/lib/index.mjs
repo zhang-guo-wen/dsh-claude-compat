@@ -1875,32 +1875,17 @@ function leafId(id) {
 	const separator = id.lastIndexOf(":");
 	return separator < 0 ? id : id.slice(separator + 1);
 }
-/** The base URL bare package specifiers resolve against, when the Loader exposes one. */
-function harnessBase(ctx) {
-	return ctx.baseUrl;
-}
-/**
-* Resolve the mcp-client plugin object from the Loader's module graph so it is
-* the same module instance the composition mounts (its `serverName` reservation
-* is module state). Falls back to a plain dynamic import.
-* @param ctx - host context carrying the Loader.
-* @returns the mcp-client host plugin object.
-*/
+/** Resolve the mcp-client plugin from the Loader's module graph (same instance the composition mounts). */
 async function resolveMcpClient(ctx) {
 	const loader = ctx.get("loader");
-	const base = harnessBase(ctx);
+	const base = ctx.baseUrl;
 	if (loader?.internal !== void 0 && base !== void 0) try {
 		const mod = await loader.internal.import(MCP_CLIENT_MODULE, base, {});
 		if (typeof mod.apply === "function") return mod;
 	} catch {}
 	return await import("@deepseek-ai/dsh-mcp-client");
 }
-/**
-* Every configured mcp-client row: the Loader's own entries (global plane) plus
-* each agent preset's composition rows.
-* @param ctx - host context carrying the Loader and, in the web profile, the roster.
-* @returns the rows in Loader order, then roster order.
-*/
+/** Every configured mcp-client row: Loader entries (global) plus each agent preset's composition rows. */
 async function listRows(ctx) {
 	const rows = [];
 	const loader = ctx.get("loader");
@@ -1940,10 +1925,40 @@ async function describeRow(ctx, row) {
 		entryId: row.entryId
 	})).spec;
 }
-/** The tool names one server published into an agent's scope. */
+/** The tool names one server published into an agent's scope (dynamic mode). */
 function toolNamesFor(tools, agentCtx, serverName) {
 	const prefix = `mcp__${serverName}__`;
 	return tools.schemas(scopeOf(agentCtx)).map((schema) => schema.name).filter((name) => name.startsWith(prefix));
+}
+/** Connect one configured server through the MCP SDK without registering anything. */
+async function connectLazy(config) {
+	const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+	let transport;
+	if (config.transport === "stdio") {
+		const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+		transport = new StdioClientTransport({
+			command: config.command,
+			args: [...config.args],
+			env: {
+				...process.env,
+				...config.env
+			},
+			...config.cwd === "" ? {} : { cwd: config.cwd },
+			stderr: "ignore"
+		});
+	} else {
+		const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+		transport = new StreamableHTTPClientTransport(new URL(config.url), Object.keys(config.headers).length === 0 ? {} : { requestInit: { headers: config.headers } });
+	}
+	const client = new Client({
+		name: "@zhang-guo-wen/dsh-claude-compat",
+		version: "0.1"
+	});
+	await client.connect(transport);
+	return {
+		client,
+		tools: (await client.listTools()).tools ?? []
+	};
 }
 const SERVER_ROW_SCHEMA = {
 	type: "object",
@@ -1959,27 +1974,24 @@ const SERVER_ROW_SCHEMA = {
 			required: true,
 			description: "Composition that owns the row, e.g. \"global\" or \"preset standard\"."
 		},
-		description: {
-			type: "string",
-			required: true,
-			description: "Configured description, empty when none."
-		},
 		loaded: {
 			type: "boolean",
 			required: true,
-			description: "Whether the server is currently running for this session."
+			description: "Whether the server is running for this session."
 		}
 	}
 };
 /**
-* Register the three lazy-MCP tools on this host. A no-op when the deployment
-* has no tool registry.
-* @param ctx - host context (the same one that owns the MCP authoring service).
+* Register the on-demand MCP tools in one composition scope.
+* @param ctx - scope the tools belong to (a preset row's context).
+* @param mode - how a loaded server reaches the model.
 */
-function registerLazyMcp(ctx) {
+function registerMcpTools(ctx, mode) {
+	if (mode !== "eager" && mode !== "dynamic" && mode !== "lazy") throw new Error(`claude-compat: unknown mcpLoading ${JSON.stringify(String(mode))} (expected eager | dynamic | lazy)`);
+	if (mode === "eager") return;
 	const tools = ctx.get("tools");
 	if (tools === void 0) return;
-	/** Loaded mounts keyed by agent id, then serverName. */
+	/** Loaded servers keyed by agent id, then serverName. */
 	const mounted = /* @__PURE__ */ new Map();
 	const loadedFor = (agentId) => {
 		const existing = mounted.get(agentId);
@@ -1988,15 +2000,16 @@ function registerLazyMcp(ctx) {
 		mounted.set(agentId, created);
 		return created;
 	};
-	ctx.effect(() => () => {
+	const stopAll = async () => {
 		const pending = [];
-		for (const perAgent of mounted.values()) for (const mount of perAgent.values()) pending.push(mount.dispose());
+		for (const perAgent of mounted.values()) for (const server of perAgent.values()) pending.push(server.dispose());
 		mounted.clear();
-		return Promise.allSettled(pending).then(() => void 0);
-	}, "claude-compat: lazy mcp teardown");
+		await Promise.allSettled(pending);
+	};
+	ctx.effect(() => () => stopAll().then(() => void 0), "claude-compat: mcp tools teardown");
 	ctx.effect(() => tools.register(defineTool({
 		name: "mcp_list",
-		description: "List the MCP servers configured for this deployment, with their scope and whether each is currently running. Servers that are configured but not running can be started on demand with `mcp_load`; load only the ones you need, because a running server adds its tools to the request.",
+		description: "List the MCP servers configured for this deployment, their scope, and whether each is running. Servers that are configured but not running can be started on demand with `mcp_load`; load only what you need, because a running server costs prompt tokens.",
 		parameters: {},
 		output: {
 			schema: {
@@ -2005,23 +2018,21 @@ function registerLazyMcp(ctx) {
 			},
 			render: (_args, rows) => [{
 				type: "text",
-				text: rows.length === 0 ? "(no MCP servers configured)" : rows.map((row) => `${row.name} [${row.scope}] ${row.loaded ? "running" : "not loaded"}${row.description === "" ? "" : ` — ${row.description}`}`).join("\n")
+				text: rows.length === 0 ? "(no MCP servers configured)" : rows.map((row) => `${row.name} [${row.scope}] ${row.loaded ? "running" : "not loaded"}`).join("\n")
 			}]
 		},
 		async execute(_args, exec) {
-			const agentId = exec.agent?.id;
-			const running = agentId === void 0 ? void 0 : mounted.get(agentId);
+			const running = exec.agent === void 0 ? void 0 : mounted.get(exec.agent.id);
 			return (await listRows(ctx)).map((row) => ({
 				name: row.serverName,
 				scope: row.scopeLabel,
-				description: "",
 				loaded: row.enabled || running?.has(row.serverName) === true
 			}));
 		}
 	})), "claude-compat: mcp_list");
 	ctx.effect(() => tools.register(defineTool({
 		name: "mcp_load",
-		description: "Start one configured but not-running MCP server for THIS session and add its tools to the request. Use `mcp_list` first to see the available names. Starting a server takes a few seconds; the tools it contributes are returned so you can call them directly afterwards.",
+		description: mode === "lazy" ? "Start one configured but not-running MCP server for THIS session and return its tools. Call the tools you need afterwards with `mcp_call`, passing the server name and tool name from this result." : "Start one configured but not-running MCP server for THIS session and add its tools to the request. Use `mcp_list` first to see the available names.",
 		parameters: { server: {
 			type: "string",
 			required: true,
@@ -2039,49 +2050,149 @@ function registerLazyMcp(ctx) {
 					tools: {
 						type: "array",
 						required: true,
-						items: { type: "string" }
+						items: {
+							type: "object",
+							additionalProperties: false,
+							properties: {
+								name: {
+									type: "string",
+									required: true
+								},
+								description: {
+									type: "string",
+									required: true
+								},
+								schema: {
+									type: "string",
+									required: true,
+									description: "JSON schema of the tool arguments, empty when the server declared none."
+								}
+							}
+						}
 					}
 				}
 			},
 			render: (_args, value) => [{
 				type: "text",
-				text: value.tools.length === 0 ? `Started MCP server "${value.server}"; it exposed no tools.` : `Started MCP server "${value.server}". New tools: ${value.tools.join(", ")}`
+				text: value.tools.length === 0 ? `Started MCP server "${value.server}"; it exposed no tools.` : `Started MCP server "${value.server}".\n` + value.tools.map((tool) => `- ${tool.name}: ${tool.description}${tool.schema === "" ? "" : `\n  args: ${tool.schema}`}`).join("\n")
 			}]
 		},
 		async execute(args, exec) {
 			const agent = exec.agent;
 			if (agent === void 0) throw new Error("mcp_load requires an owning agent session");
 			const serverName = String(args.server);
-			if (loadedFor(agent.id).get(serverName) !== void 0) return {
+			const existing = loadedFor(agent.id).get(serverName);
+			if (existing !== void 0) return {
 				server: serverName,
-				tools: toolNamesFor(tools, agent.ctx, serverName)
+				tools: describeTools(existing)
 			};
 			const row = (await listRows(ctx)).find((candidate) => candidate.serverName === serverName);
 			if (row === void 0) throw new Error(`unknown MCP server "${serverName}" — call mcp_list for the configured names`);
-			if (row.enabled) return {
-				server: serverName,
-				tools: toolNamesFor(tools, agent.ctx, serverName)
-			};
-			const spec = await describeRow(ctx, row);
+			const config = mcpEntryConfig(await describeRow(ctx, row), serverName);
+			if (mode === "lazy") {
+				const { client, tools: listed } = await connectLazy(config);
+				loadedFor(agent.id).set(serverName, {
+					dispose: async () => {
+						await client.close();
+					},
+					client,
+					tools: listed
+				});
+				return {
+					server: serverName,
+					tools: listed.map(lazyTool)
+				};
+			}
 			const mod = await resolveMcpClient(ctx);
 			const plugin = {
 				name: mod.name,
 				inject: mod.inject,
 				apply: mod.apply
 			};
-			const handle = await agent.ctx.plugin(plugin, mcpEntryConfig(spec, serverName));
+			const handle = await agent.ctx.plugin(plugin, config);
 			loadedFor(agent.id).set(serverName, { dispose: async () => {
 				await handle.dispose();
 			} });
 			return {
 				server: serverName,
-				tools: toolNamesFor(tools, agent.ctx, serverName)
+				tools: toolNamesFor(tools, agent.ctx, serverName).map((name) => ({
+					name,
+					description: "",
+					schema: ""
+				}))
 			};
 		}
 	})), "claude-compat: mcp_load");
+	if (mode === "lazy") ctx.effect(() => tools.register(defineTool({
+		name: "mcp_call",
+		description: "Call one tool of an MCP server that `mcp_load` started for THIS session. Use the server and tool names from the mcp_load result; pass the tool arguments exactly as that result described them.",
+		parameters: {
+			server: {
+				type: "string",
+				required: true,
+				description: "The MCP serverName, as reported by mcp_load."
+			},
+			tool: {
+				type: "string",
+				required: true,
+				description: "The tool name reported by mcp_load."
+			},
+			arguments: {
+				type: "json",
+				required: true,
+				description: "Arguments object for that tool, matching its reported schema."
+			}
+		},
+		output: {
+			schema: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					server: {
+						type: "string",
+						required: true
+					},
+					tool: {
+						type: "string",
+						required: true
+					},
+					text: {
+						type: "string",
+						required: true,
+						description: "The tool result rendered as text."
+					},
+					isError: {
+						type: "boolean",
+						required: true
+					}
+				}
+			},
+			render: (_args, value) => [{
+				type: "text",
+				text: value.text
+			}]
+		},
+		async execute(args, exec) {
+			const agent = exec.agent;
+			if (agent === void 0) throw new Error("mcp_call requires an owning agent session");
+			const request = args;
+			const mount = loadedFor(agent.id).get(request.server);
+			if (mount?.client === void 0) throw new Error(`MCP server "${request.server}" is not loaded — call mcp_load first`);
+			const result = await mount.client.callTool({
+				name: request.tool,
+				arguments: asRecord(request.arguments)
+			});
+			return {
+				server: request.server,
+				tool: request.tool,
+				text: renderCallResult(result),
+				isError: result?.isError === true
+			};
+		}
+	})), "claude-compat: mcp_call");
 	ctx.effect(() => tools.register(defineTool({
 		name: "mcp_unload",
-		description: "Stop an MCP server that `mcp_load` started for THIS session and remove its tools from the request again. Use it when you are done with a server, to keep the tool list small.",
+		description: "Stop an MCP server that `mcp_load` started for THIS session and release it again. Use it when you are done with a server, to keep the prompt small.",
 		parameters: { server: {
 			type: "string",
 			required: true,
@@ -2125,6 +2236,32 @@ function registerLazyMcp(ctx) {
 		}
 	})), "claude-compat: mcp_unload");
 }
+/** One MCP tool projected onto the model-facing shape. */
+function lazyTool(tool) {
+	return {
+		name: tool.name,
+		description: tool.description ?? "",
+		schema: tool.inputSchema === void 0 ? "" : JSON.stringify(tool.inputSchema)
+	};
+}
+/** The already-loaded server's tool list, re-reported without reconnecting. */
+function describeTools(mount) {
+	if (mount.tools === void 0) return [];
+	return mount.tools.map(lazyTool);
+}
+/** Coerce model-supplied arguments to the object the SDK expects. */
+function asRecord(value) {
+	return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+/** Render one MCP call result as text for the model. */
+function renderCallResult(result) {
+	const content = result?.content;
+	if (Array.isArray(content)) {
+		const text = content.map((block) => block.type === "text" ? block.text ?? "" : JSON.stringify(block)).filter((part) => part !== "").join("\n");
+		if (text !== "") return text;
+	}
+	return JSON.stringify(result);
+}
 //#endregion
 //#region src/index.ts
 /** Cordis plugin name used by loader diagnostics. */
@@ -2152,7 +2289,8 @@ const Config = z.object({
 	claude: z.boolean().default(true),
 	codex: z.boolean().default(true),
 	maxQuestionBytes: z.number().step(1).min(1).default(4096),
-	provider: z.string().min(1).default("fork")
+	provider: z.string().min(1).default("fork"),
+	mcpLoading: z.string().default("dynamic")
 });
 /**
 * Register the Claude Code skill provider and instruction/rule contributors,
@@ -2188,7 +2326,7 @@ async function apply(ctx, config = {}) {
 		provider: config.provider
 	});
 	new ClaudeCompatMcp(ctx);
-	registerLazyMcp(ctx);
+	registerMcpTools(ctx, config.mcpLoading ?? "dynamic");
 }
 //#endregion
 export { ClaudeCompatMcp, Config, apply, assertServerName, inject, mcpEntryConfig, name, specFromEntryConfig };

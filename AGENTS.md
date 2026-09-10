@@ -73,7 +73,14 @@ await mount?.tree.refresh?.()
 
 ### 延迟加载(src/lazy-mcp.ts)
 
-`mcp_list` / `mcp_load` / `mcp_unload` 三个工具让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token:
+**加载方式(`mcpLoading`)是 host 插件的 `Config`**,不是 preset 行 —— 见下面的坑。三种取值:
+
+- `eager`:不注册按需工具。
+- `dynamic`(默认):`mcp_load` 把 mcp-client 挂进**调用方 agent 的作用域**,原生注册工具。
+- `lazy`:**用 MCP SDK 直连、完全不注册工具**;`mcp_load` 把工具 schema 作为结果返回,模型用固定的
+  `mcp_call` 代理调用 → **工具列表永不变,请求缓存前缀零失效**。
+
+`mcp_list` / `mcp_load` / `mcp_unload`(lazy 另加 `mcp_call`)让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token:
 
 - 被**禁用**的 composition 行不挂载,所以它的工具不进目录 —— 这就是"待加载"的来源。
 - `mcp_load` 走 **agent 作用域**:`exec.agent.ctx.plugin(mcpClientPlugin, config)`,实例随该会话销毁,
@@ -82,6 +89,11 @@ await mount?.tree.refresh?.()
   注册必须包在 `ctx.effect` 里。`exec.agent` 是拿到当前 agent 的唯一途径(无 agent 时要拒绝执行)。
 - mcp-client 的插件对象**经 loader 内部解析**取得(`ctx.loader.internal.import`),与组合用的是同一个模块实例,
   否则 `serverName` 预留(模块级状态)不共享,可能挂出重复实例。
+
+**坑(实测):不要把注册放在 preset 作用域。** 曾把按需工具做成 preset 行(`inject: ['tools']`,在 preset 的
+standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂一次**(MCP 子进程反复重启)。
+撤掉该行即恢复。所以开关落在 **host 平面**(插件的 cordis.yml `config.mcpLoading`),语义是"**重启后对所有会话生效**";
+要做"只对新会话生效"需要另找机制(例如放一个 **disabled 的配置载体行** 让 host 读,而不是真的挂载它)。
 
 ## MCP JSON 兼容
 

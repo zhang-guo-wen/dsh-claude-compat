@@ -130,6 +130,24 @@ npx @deepseek-ai/dsh plugin --profile web add /绝对路径/dsh-claude-compat/pa
 挂载是 **agent 作用域**的:某个会话加载的服务器,不会出现在别的会话里。这和 Claude Code 的 tool search
 是同一类取舍 —— 只在真正需要时付一次往返和多出来的 schema。
 
+### 选择加载方式
+
+插件配置行上的 `mcpLoading` 决定"被停掉的服务器"如何到达模型:
+
+| 模式 | 行为 |
+|---|---|
+| `eager` | 不注册按需工具;每个启用的行在 preset 挂载时直接加载 |
+| `dynamic`(默认) | `mcp_load` 把服务器挂进**当前会话**,它的工具进入请求 —— 工具绑定最好,但每次加载会**变一次工具列表** |
+| `lazy` | `mcp_load` 用 **MCP SDK 直连、完全不注册工具**,把工具 schema 作为结果返回;模型用固定的 `mcp_call` 代理调用 —— **工具列表永不变 → 请求缓存前缀零失效** |
+
+```yaml
+- name: '@zhang-guo-wen/dsh-claude-compat'
+  config:
+    mcpLoading: lazy
+```
+
+该配置在 **host 启动时读取**,改动在下次 `dsh web` 重启后生效。
+
 ## Claude Code / Codex 兼容
 
 ### 技能

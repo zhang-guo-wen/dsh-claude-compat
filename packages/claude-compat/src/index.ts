@@ -25,7 +25,7 @@ import {
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
-import { registerLazyMcp } from './lazy-mcp.ts'
+import { registerMcpTools, type McpLoadingMode } from './lazy-mcp.ts'
 
 export { ClaudeCompatMcp } from './mcp-remote.ts'
 export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
@@ -46,6 +46,13 @@ export interface Config
   maxQuestionBytes?: number
   /** The `ctx.subagents` fork provider name (default `fork`). */
   provider?: string
+  /**
+   * How MCP servers load: `eager` (every enabled row mounts at preset mount),
+   * `dynamic` (on-demand tools mount a server into the calling session; the
+   * tool list changes once per load) or `lazy` (on-demand tools talk to the
+   * server without registering, so the tool list never changes).
+   */
+  mcpLoading?: McpLoadingMode
 }
 
 export const Config: Schema<Config> = z.object({
@@ -65,6 +72,7 @@ export const Config: Schema<Config> = z.object({
   codex: z.boolean().default(true),
   maxQuestionBytes: z.number().step(1).min(1).default(4096),
   provider: z.string().min(1).default('fork'),
+  mcpLoading: z.string().default('dynamic'),
 })
 
 /**
@@ -106,9 +114,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // (a Loader-presence guard here would skip registration when the service is
   // not yet ready and the client would 404 on every MCP mutation).
   new ClaudeCompatMcp(ctx)
-  // Session-scoped lazy MCP: mcp_list / mcp_load / mcp_unload let a session pull
-  // a configured-but-stopped server in on demand instead of running them all.
-  registerLazyMcp(ctx)
+  // On-demand MCP loading: mcp_list / mcp_load / (mcp_call) / mcp_unload let a
+  // session pull a configured-but-stopped server in instead of running them all.
+  registerMcpTools(ctx, (config.mcpLoading ?? 'dynamic') as McpLoadingMode)
 }
 
 
