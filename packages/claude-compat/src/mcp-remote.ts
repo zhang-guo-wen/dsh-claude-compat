@@ -291,14 +291,48 @@ export class ClaudeCompatMcp extends TypertRemoteService {
    */
   private async refreshPreset(agentPreset: string): Promise<void> {
     try {
-      const mount = livePresetMounts().filter(candidate => candidate.presetId === agentPreset).at(-1)
-      const refresh = (mount?.tree as { refresh?: () => Promise<void> } | undefined)?.refresh
-      if (refresh !== undefined && mount !== undefined) {
-        await refresh.call(mount.tree)
+      const mountsFor = await this.mountRegistry()
+      if (mountsFor !== undefined) {
+        const mount = mountsFor().filter(candidate => candidate.presetId === agentPreset).at(-1)
+        const refresh = (mount?.tree as { refresh?: () => Promise<void> } | undefined)?.refresh
+        if (refresh !== undefined && mount !== undefined) {
+          await refresh.call(mount.tree)
+          return
+        }
+      }
+      // Fallback: no reachable standing tree, so recompose through the service
+      // so the change still goes live (correct, but restarts the whole preset).
+      const presets = this.ctx.get('agentPresets') as { standingKeyFor?(id?: string): Promise<unknown> } | undefined
+      if (presets?.standingKeyFor !== undefined) {
+        await presets.standingKeyFor(agentPreset)
       }
     } catch (error) {
       this.warnPatch(`claude-compat: preset "${agentPreset}" refresh failed after edit: ${String(error)}`)
     }
+  }
+
+  /**
+   * Resolve the `livePresetMounts` reader from the agent-presets instance the
+   * Loader actually uses. A plain import can land on a second copy of the
+   * package (the harness resolves the roster from its own graph), so this goes
+   * through the Loader's internal resolver with the harness base first, then
+   * falls back to the statically imported reader.
+   * @returns the mount reader, or undefined when neither path is available.
+   */
+  private async mountRegistry(): Promise<(() => readonly { presetId: string; tree: unknown }[]) | undefined> {
+    const loader = this.ctx.get('loader') as { internal?: { import(spec: string, base: string, options: object): Promise<unknown> } } | undefined
+    const base = (this.ctx as unknown as { baseUrl?: string }).baseUrl
+    if (loader?.internal !== undefined && base !== undefined) {
+      try {
+        const mod = await loader.internal.import('@deepseek-ai/dsh-agent-presets', base, {}) as { livePresetMounts?: () => readonly { presetId: string; tree: unknown }[] }
+        if (mod.livePresetMounts !== undefined) return mod.livePresetMounts
+      } catch {
+        // Swallows only the internal-resolver failure; the static reader below
+        // is the fallback, and the outer call treats an empty registry as
+        // "nothing to refresh" rather than an error.
+      }
+    }
+    return () => livePresetMounts()
   }
 
   private async globalInclude(target: Extract<McpTarget, { scope: 'global' }>): Promise<{ entry: Entry; tree: WritableIncludeTree }> {
