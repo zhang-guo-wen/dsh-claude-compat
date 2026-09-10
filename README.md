@@ -40,15 +40,15 @@ The built `lib/` is committed, so the repository installs and runs directly — 
 
 ### From the git repository (recommended)
 
-Install a **release tag** (`v0.1.2-alpha.1`) rather than the default branch, so a later
+Install a **release tag** (`v0.1.3-alpha.1`) rather than the default branch, so a later
 work-in-progress commit on `master` is not picked up:
 
 ```sh
 # over HTTPS (public repo)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
 
 # or over SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.2-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
 ```
 
 The spec has two parts: `#<ref>` pins a **tag / commit / branch**, and

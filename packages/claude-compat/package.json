@@ -1,7 +1,7 @@
 {
   "name": "@zhang-guo-wen/dsh-claude-compat",
   "description": "Combined Claude Code compatibility: skills/rules discovery + /btw command (host) + settings UI (client)",
-  "version": "0.1.2-alpha.1",
+  "version": "0.1.3-alpha.1",
   "type": "module",
   "license": "Apache-2.0",
   "main": "lib/index.mjs",
