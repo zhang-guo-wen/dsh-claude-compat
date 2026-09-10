@@ -36,19 +36,46 @@ and prompt rules from the Web UI instead of hand-editing YAML.
 
 ## Install
 
+The built `lib/` is committed, so the repository installs and runs directly — no build step.
+
+### From the git repository (recommended)
+
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add @zhang-guo-wen/dsh-claude-compat
-npx @deepseek-ai/dsh web
+# over HTTPS (public repo)
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+
+# or over SSH
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
 ```
 
-Or declare it as a bundle in the profile's `package.json` and install it like any other plugin:
+`#path:packages/claude-compat` selects the plugin package inside the repository (pnpm's
+subdirectory git spec). Re-run the same command to update, or append `#<commit-or-tag>` after the
+path to pin a revision.
+
+### From a local checkout
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web add /absolute/path/to/dsh-claude-compat/packages/claude-compat
+```
+
+A `file:` dependency installs a **copy**, so a rebuild in the checkout does not reach the running
+host until you reinstall. For a live link while developing, use `pnpm link` instead (see
+[AGENTS.md](AGENTS.md)).
+
+### In a profile manifest
+
+Either form also works as a plain profile dependency:
 
 ```json
 {
   "dsh": { "profile": { "bundles": ["@zhang-guo-wen/dsh-claude-compat"] } },
-  "dependencies": { "@zhang-guo-wen/dsh-claude-compat": "^0.1.1-alpha.1" }
+  "dependencies": {
+    "@zhang-guo-wen/dsh-claude-compat": "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+  }
 }
 ```
+
+After installing, run `npx @deepseek-ai/dsh web` and open the settings page.
 
 ## Managing MCP servers
 

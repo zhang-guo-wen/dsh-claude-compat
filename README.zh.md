@@ -34,19 +34,44 @@ Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 �
 
 ## 安装
 
+构建产物 `lib/` **已提交进仓库**,所以直接从 git 安装就能用,无需构建。
+
+### 从 git 仓库安装(推荐)
+
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add @zhang-guo-wen/dsh-claude-compat
-npx @deepseek-ai/dsh web
+# HTTPS(公开仓库)
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+
+# 或 SSH
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
 ```
 
-或者直接在 profile 的 `package.json` 里声明为 bundle:
+`#path:packages/claude-compat` 指定仓库内的插件包(pnpm 的子目录 git 写法)。**再次执行同一条命令即为更新**;
+在 path 之后追加 `#<commit 或 tag>` 可锁定版本。
+
+### 从本地 checkout 安装
+
+```sh
+npx @deepseek-ai/dsh plugin --profile web add /绝对路径/dsh-claude-compat/packages/claude-compat
+```
+
+`file:` 依赖装的是**拷贝**,所以本地改完重建**不会**影响正在跑的 host,要重装才生效;
+开发时想要实时联动请用 `pnpm link`(见 [AGENTS.md](AGENTS.md))。
+
+### 在 profile 清单里声明
+
+也可以直接作为 profile 依赖:
 
 ```json
 {
   "dsh": { "profile": { "bundles": ["@zhang-guo-wen/dsh-claude-compat"] } },
-  "dependencies": { "@zhang-guo-wen/dsh-claude-compat": "^0.1.1-alpha.1" }
+  "dependencies": {
+    "@zhang-guo-wen/dsh-claude-compat": "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+  }
 }
 ```
+
+装好后运行 `npx @deepseek-ai/dsh web`,打开设置页即可。
 
 ## 管理 MCP 服务器
 
