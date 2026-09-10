@@ -67,16 +67,8 @@ function specJson(describe: DescribeMcpResult | undefined): string {
   return JSON.stringify(flattenSpec(spec), null, 2)
 }
 
-/** Parse only the connection spec from the JSON box. */
-function parseSpec(text: string, invalid: string): McpSpec {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch {
-    throw new Error(invalid)
-  }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
-  const candidate = value as AnyRecord
+/** Read one spec object (Claude-shaped fields) into the normalized spec. */
+function specFromObject(candidate: AnyRecord, invalid: string): McpSpec {
   // Claude allows omitting `type`: a command implies stdio, a url implies HTTP.
   const declared = candidate.type
   const type = declared === undefined
@@ -107,6 +99,35 @@ function parseSpec(text: string, invalid: string): McpSpec {
     return { type, url, ...(headers === undefined ? {} : { headers }) }
   }
   throw new Error(invalid)
+}
+
+/**
+ * Parse the connection JSON. Accepts a flat spec, a single-entry named map
+ * (`{ "<name>": { command|url } }`), or a Claude `mcpServers` wrapper; a name
+ * carried in the JSON is returned so the editor can fill an empty title.
+ */
+function parseSpec(text: string, invalid: string): { spec: McpSpec; serverName?: string } {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error(invalid)
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
+  let root = value as AnyRecord
+  if (root.mcpServers !== null && typeof root.mcpServers === 'object' && !Array.isArray(root.mcpServers)) {
+    root = root.mcpServers as AnyRecord
+  }
+  let serverName: string | undefined
+  if (root.type === undefined && root.command === undefined && root.url === undefined) {
+    const pairs = Object.entries(root)
+    if (pairs.length !== 1) throw new Error(invalid)
+    const [name, entry] = pairs[0] as [string, unknown]
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(invalid)
+    serverName = name
+    root = entry as AnyRecord
+  }
+  return { spec: specFromObject(root, invalid), ...(serverName === undefined ? {} : { serverName }) }
 }
 
 /** Modal editor: one scope dropdown, title/description fields, and a JSON spec box. */
@@ -148,9 +169,10 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
 
   const submit = (): void => {
     try {
-      const serverName = title.trim()
+      const parsed = parseSpec(json, t('mcp.form.jsonInvalid'))
+      const serverName = (title.trim() !== '' ? title.trim() : parsed.serverName ?? '').trim()
       if (serverName === '') throw new Error(t('mcp.form.required'))
-      const spec = parseSpec(json, t('mcp.form.jsonInvalid'))
+      const spec = parsed.spec
       const target = scopeValue === ''
         ? { scope: 'global' as const }
         : { scope: 'preset' as const, agentPreset: scopeValue }
