@@ -7,7 +7,7 @@
 export const NS = 'settings.contextInjection'
 
 const zh = {
-  'nav': 'Harness兼容',
+  'nav': 'Claude 兼容',
   'tab.prompt': '提示词管理',
   'tab.mcp': 'MCP 管理',
   'prompt.intro': '默认加载 AGENTS.md、CLAUDE.md：会话开始时加载一次（项目根 + 全局），后续对文件的修改不会重复注入。',
@@ -84,7 +84,7 @@ const zh = {
 export type ContextInjectionSectionKey = keyof typeof zh
 
 const en: Record<ContextInjectionSectionKey, string> = {
-  'nav': 'Harness Compat',
+  'nav': 'Claude Compat',
   'tab.prompt': 'Prompt management',
   'tab.mcp': 'MCP management',
   'prompt.intro': 'AGENTS.md and CLAUDE.md load by default, once at session start (project root + global); later edits are not re-injected.',
