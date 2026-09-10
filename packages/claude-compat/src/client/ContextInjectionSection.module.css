@@ -333,6 +333,21 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.formSelect {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.formSelect:focus {
+  border-color: var(--dsw-alias-state-business-primary);
+  outline: none;
+}
+
 .formJson {
   width: 100%;
   min-height: 220px;

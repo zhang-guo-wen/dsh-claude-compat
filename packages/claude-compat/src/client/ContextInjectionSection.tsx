@@ -330,6 +330,10 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
             busy={editorBusy}
             error={editorError}
             describeMcp={describeMcp}
+            descriptionInitial={editor.server === undefined
+              ? ''
+              : (editor.server.description ?? state.mcpDescriptions[mcpDescriptionKey(editor.server)] ?? '')}
+            onUpdateDescription={updateMcpDescription}
             t={t}
             onClose={closeEditor}
             onSubmit={(request) => { void submitEditor(request) }}

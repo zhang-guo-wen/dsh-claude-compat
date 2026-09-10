@@ -1,12 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   AddMcpRequest,
   DescribeMcpRequest,
   DescribeMcpResult,
   EditMcpRequest,
   McpSpec,
-  McpTarget,
 } from '../types.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
 import type { McpServer } from './settings-controller.ts'
@@ -29,6 +28,8 @@ interface McpEditorProps {
   readonly busy: boolean
   readonly error: string | null
   readonly describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
+  readonly descriptionInitial: string
+  readonly onUpdateDescription: (key: string, value: string) => void
   readonly t: Translate
   readonly onClose: () => void
   readonly onSubmit: (request: McpEditorRequest) => void
@@ -36,12 +37,9 @@ interface McpEditorProps {
 
 type AnyRecord = Record<string, unknown>
 
-/** Build the composition target for a row, or the default global target. */
-function targetForServer(server: McpServer | undefined): McpTarget {
-  if (server === undefined) return { scope: 'global' }
-  return server.scope === 'global'
-    ? { scope: 'global' }
-    : { scope: 'preset', agentPreset: server.presetId ?? '' }
+/** Plugin-owned description key for one row (`global:<name>` or `preset:<id>:<name>`). */
+function descriptionKey(scope: 'global' | 'preset', agentPreset: string, serverName: string): string {
+  return scope === 'preset' ? `preset:${agentPreset}:${serverName}` : `global:${serverName}`
 }
 
 /** Flatten a spec into a Claude-shaped object (spec fields at the top level). */
@@ -62,48 +60,22 @@ function flattenSpec(spec: McpSpec): AnyRecord {
   }
 }
 
-/** Serialize the editable config to pretty-printed Claude-shaped JSON. */
-function requestJson(mode: McpEditorMode, server: McpServer | undefined, describe: DescribeMcpResult | undefined): string {
-  if (mode === 'edit') {
-    const base: AnyRecord = describe === undefined
-      ? { target: targetForServer(server), entryId: server?.entryId ?? '', serverName: server?.serverName ?? '' }
-      : { target: describe.target, entryId: describe.entryId, serverName: describe.serverName, ...flattenSpec(describe.spec) }
-    return JSON.stringify(base, null, 2)
+/** The connection-spec JSON prefilled in the box (no scope/title — those are fields). */
+function specJson(describe: DescribeMcpResult | undefined): string {
+  const spec = describe?.spec ?? { type: 'stdio', command: '', args: [], env: {} }
+  return JSON.stringify(flattenSpec(spec), null, 2)
+}
+
+/** Parse only the connection spec from the JSON box. */
+function parseSpec(text: string, invalid: string): McpSpec {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error(invalid)
   }
-  return JSON.stringify({
-    target: { scope: 'global' },
-    serverName: '',
-    type: 'stdio',
-    command: '',
-    args: [],
-    env: {},
-  }, null, 2)
-}
-
-/** Derive a serverName from the command/args when the JSON omits one. */
-function deriveServerName(spec: AnyRecord, fallback: string): string {
-  const candidates = [
-    ...(Array.isArray(spec.args) ? [...spec.args].reverse().map(String) : []),
-    typeof spec.command === 'string' ? spec.command : '',
-  ].filter(Boolean)
-  for (const candidate of candidates) {
-    if (candidate.includes('@') && candidate.includes('/')) {
-      const name = candidate.split('/').pop() ?? ''
-      return sanitizeName(name) || fallback
-    }
-    const name = sanitizeName(candidate)
-    if (name !== '') return name
-  }
-  return fallback
-}
-
-function sanitizeName(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, '_').replace(/^_+|_+$/g, '').slice(0, 32)
-}
-
-/** Read a spec from the object: either a nested `spec` or the flat fields. */
-function specOf(value: AnyRecord, invalid: string): McpSpec | undefined {
-  const candidate = (value.spec ?? value) as AnyRecord
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
+  const candidate = value as AnyRecord
   const type = candidate.type
   if (type === 'stdio') {
     const command = candidate.command
@@ -129,74 +101,15 @@ function specOf(value: AnyRecord, invalid: string): McpSpec | undefined {
       : undefined
     return { type, url, ...(headers === undefined ? {} : { headers }) }
   }
-  return undefined
+  throw new Error(invalid)
 }
 
-function targetOf(value: AnyRecord, mode: McpEditorMode, server: McpServer | undefined, invalid: string): McpTarget {
-  const raw = value.target as AnyRecord | undefined
-  if (raw !== undefined && typeof raw === 'object') {
-    const scope = raw.scope
-    if (scope === 'global') return { scope: 'global' }
-    if (scope === 'preset') {
-      const agentPreset = raw.agentPreset
-      if (typeof agentPreset === 'string' && agentPreset.trim() !== '') {
-        return { scope: 'preset', agentPreset: agentPreset.trim() }
-      }
-    }
-    throw new Error(invalid)
-  }
-  return mode === 'edit' ? targetForServer(server) : { scope: 'global' }
-}
-
-/**
- * Parse the editor JSON into the request consumed by the host. Accepts the
- * canonical request, a Claude `mcpServers` map, a flattened `serverName`+spec,
- * or a bare spec (deriving the serverName and defaulting the target).
- */
-function parseRequest(text: string, mode: McpEditorMode, server: McpServer | undefined, invalid: string): McpEditorRequest {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch {
-    throw new Error(invalid)
-  }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
-  const root = value as AnyRecord
-
-  // Claude `mcpServers` map: unwrap to its single entry.
-  let entry: AnyRecord = root
-  if (root.mcpServers !== null && typeof root.mcpServers === 'object' && !Array.isArray(root.mcpServers)) {
-    const pairs = Object.entries(root.mcpServers as AnyRecord)
-    if (pairs.length !== 1) throw new Error(invalid)
-    const [containerName, containerSpec] = pairs[0] as [string, unknown]
-    if (containerSpec === null || typeof containerSpec !== 'object') throw new Error(invalid)
-    entry = { ...(containerSpec as AnyRecord), serverName: containerName }
-  }
-
-  const spec = specOf(entry, invalid)
-  if (spec === undefined) throw new Error(invalid)
-  const serverName = typeof entry.serverName === 'string' && entry.serverName.trim() !== ''
-    ? entry.serverName.trim()
-    : deriveServerName(entry, sanitizeName(spec.type === 'stdio' ? spec.command : spec.url))
-  if (serverName === '') throw new Error(invalid)
-
-  const target = targetOf(entry, mode, server, invalid)
-  const entryId = typeof entry.entryId === 'string' && entry.entryId.trim() !== ''
-    ? entry.entryId.trim()
-    : mode === 'edit' ? server?.entryId ?? '' : undefined
-  if (mode === 'edit' && (entryId === undefined || entryId === '')) throw new Error(invalid)
-
-  const result: McpEditorRequest = {
-    target,
-    serverName,
-    spec,
-    ...(entryId === undefined ? {} : { entryId }),
-  } as McpEditorRequest
-  return result
-}
-
-/** Modal editor: one JSON textbox, filled and parsed on save. */
-export function McpEditor({ open, mode, server, disabled, busy, error, describeMcp, t, onClose, onSubmit }: McpEditorProps): ReactNode {
+/** Modal editor: scope/title/description fields plus one JSON box for the spec. */
+export function McpEditor({ open, mode, server, disabled, busy, error, describeMcp, descriptionInitial, onUpdateDescription, t, onClose, onSubmit }: McpEditorProps): ReactNode {
+  const [scope, setScope] = useState<'global' | 'preset'>(server?.scope ?? 'global')
+  const [agentPreset, setAgentPreset] = useState(server?.presetId ?? '')
+  const [title, setTitle] = useState(server?.serverName ?? '')
+  const [description, setDescription] = useState(descriptionInitial)
   const [json, setJson] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -206,34 +119,58 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
     if (!open) return
     let current = true
     setLocalError(null)
+    setScope(server?.scope ?? 'global')
+    setAgentPreset(server?.presetId ?? '')
+    setTitle(server?.serverName ?? '')
+    setDescription(descriptionInitial)
     if (mode === 'edit' && server?.entryId) {
       setLoading(true)
-      const target = targetForServer(server)
+      const target = server.scope === 'global'
+        ? { scope: 'global' as const }
+        : { scope: 'preset' as const, agentPreset: server.presetId ?? '' }
       void describeMcp({ target, entryId: server.entryId }).then(
-        (described) => { if (current) { setJson(requestJson(mode, server, described)); setLoading(false) } },
-        () => { if (current) { setJson(requestJson(mode, server)); setLoading(false) } },
+        (described) => { if (current) { setJson(specJson(described)); setLoading(false) } },
+        () => { if (current) { setJson(specJson(undefined)); setLoading(false) } },
       )
     } else {
-      setJson(requestJson(mode, server))
+      setJson(specJson(undefined))
     }
     return () => { current = false }
-  }, [editKey, mode, open, server, t])
+  }, [editKey, mode, open, server, descriptionInitial, t])
 
   const submit = (): void => {
     try {
-      onSubmit(parseRequest(json, mode, server, t('mcp.form.jsonInvalid')))
+      const serverName = title.trim()
+      if (serverName === '') throw new Error(t('mcp.form.required'))
+      const spec = parseSpec(json, t('mcp.form.jsonInvalid'))
+      const target = scope === 'global'
+        ? { scope: 'global' as const }
+        : { scope: 'preset' as const, agentPreset: agentPreset.trim() }
+      if (target.scope === 'preset' && target.agentPreset === '') throw new Error(t('mcp.form.required'))
+      const entryId = mode === 'edit' ? server?.entryId ?? '' : undefined
+      if (mode === 'edit' && entryId === '') throw new Error(t('mcp.form.required'))
+      const request: McpEditorRequest = {
+        target,
+        serverName,
+        spec,
+        ...(entryId === undefined ? {} : { entryId }),
+      } as McpEditorRequest
+      onSubmit(request)
+      if (description.trim() !== '') {
+        onUpdateDescription(descriptionKey(scope, agentPreset.trim(), serverName), description.trim())
+      }
     } catch (cause) {
       setLocalError(cause instanceof Error ? cause.message : t('mcp.form.jsonInvalid'))
     }
   }
 
   const formDisabled = disabled || busy
-  const title = mode === 'add' ? t('mcp.form.addTitle') : t('mcp.form.editTitle')
+  const titleText = mode === 'add' ? t('mcp.form.addTitle') : t('mcp.form.editTitle')
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={title}
+      title={titleText}
       closeLabel={t('mcp.form.close')}
       description={t('mcp.form.hint')}
       contentClassName={css.mcpEditorContent ?? ''}
@@ -247,6 +184,27 @@ export function McpEditor({ open, mode, server, disabled, busy, error, describeM
       )}
     >
       <div className={css.mcpForm}>
+        <label className={css.formField}>
+          <span className={css.formLabel}>{t('mcp.form.scope')}</span>
+          <select className={css.formSelect} value={scope} disabled={formDisabled || mode === 'edit'} aria-label={t('mcp.form.scope')} onChange={(event) => { setScope(event.currentTarget.value as 'global' | 'preset'); setLocalError(null) }}>
+            <option value="global">{t('mcp.scopeGlobal')}</option>
+            <option value="preset">{t('mcp.scopePreset')}</option>
+          </select>
+        </label>
+        {scope === 'preset' ? (
+          <label className={css.formField}>
+            <span className={css.formLabel}>{t('mcp.form.preset')}</span>
+            <Input value={agentPreset} disabled={formDisabled || mode === 'edit'} aria-label={t('mcp.form.preset')} onChange={(event) => { setAgentPreset(event.currentTarget.value); setLocalError(null) }} />
+          </label>
+        ) : null}
+        <label className={css.formField}>
+          <span className={css.formLabel}>{t('mcp.form.serverName')}</span>
+          <Input value={title} disabled={formDisabled} aria-label={t('mcp.form.serverName')} onChange={(event) => { setTitle(event.currentTarget.value); setLocalError(null) }} />
+        </label>
+        <label className={css.formField}>
+          <span className={css.formLabel}>{t('mcp.form.description')}</span>
+          <Input value={description} disabled={formDisabled} aria-label={t('mcp.form.description')} onChange={(event) => { setDescription(event.currentTarget.value); setLocalError(null) }} />
+        </label>
         <label className={css.formField}>
           <span className={css.formLabel}>{t('mcp.form.json')}</span>
           <textarea
