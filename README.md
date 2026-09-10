@@ -182,4 +182,8 @@ npm run build      # host (tsdown) + client (rolldown ModuleLoader handoff)
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE). It is an OSI-approved, permissive license: commercial
+use, modification, and redistribution are permitted, and every contributor grants a copyright
+license plus an express patent grant (Section 3).
+
+This product includes MIT-licensed portions derived from DeepSeek Harness; see [NOTICE](NOTICE).

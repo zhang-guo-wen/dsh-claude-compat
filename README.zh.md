@@ -172,4 +172,7 @@ npm run build      # host (tsdown) + client (rolldown ModuleLoader handoff)
 
 ## License
 
-MIT
+Apache License 2.0 —— 见 [LICENSE](LICENSE)。它是 OSI 认可的宽松协议:允许商用、修改与再分发;
+贡献者授予版权许可,并额外授予**明确的专利许可**(第 3 条)。
+
+本产品包含源自 DeepSeek Harness 的 MIT 授权代码,见 [NOTICE](NOTICE)。
