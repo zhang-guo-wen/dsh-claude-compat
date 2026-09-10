@@ -65,9 +65,10 @@ function statusOf(server: McpServer, t: Translate): { label: string; dot: StateD
 }
 
 /** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
-function McpRow({ server, description, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
+function McpRow({ server, description, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
   readonly server: McpServer
   readonly description: string
+  readonly pending: 'enabling' | 'disabling' | null
   readonly onEditDescription: (value: string) => void
   readonly onEdit: () => void
   readonly onToggleDisabled: (enabled: boolean) => void
@@ -77,7 +78,15 @@ function McpRow({ server, description, onEditDescription, onEdit, onToggleDisabl
   const scope = server.scope === 'global'
     ? t('mcp.scopeGlobal')
     : `${t('mcp.scopePreset')} · ${server.presetId ?? ''}`
-  const status = statusOf(server, t)
+  // A pending toggle shows the intended target and a transient label, so the
+  // row reacts the instant it is clicked instead of waiting on the child MCP
+  // process to start (or stop).
+  const status = pending === 'enabling'
+    ? { label: t('mcp.status.starting'), dot: 'warning' as StateDotState }
+    : pending === 'disabling'
+      ? { label: t('mcp.status.stopping'), dot: 'warning' as StateDotState }
+      : statusOf(server, t)
+  const checked = pending === 'enabling' ? true : pending === 'disabling' ? false : server.enabled !== false
   const disabledNow = server.enabled === false
   const [draft, setDraft] = useState<string | null>(null)
   const value = draft ?? description
@@ -111,10 +120,10 @@ function McpRow({ server, description, onEditDescription, onEdit, onToggleDisabl
           </button>
           {server.entryId !== null ? (
             <Switch
-              checked={server.enabled !== false}
+              checked={checked}
               onChange={onToggleDisabled}
               label={disabledNow ? t('mcp.enable') : t('mcp.disable')}
-              disabled={actionsDisabled}
+              disabled={actionsDisabled || pending !== null}
               title={t('mcp.status.disabled')}
             />
           ) : null}
@@ -142,6 +151,7 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
   const [editorError, setEditorError] = useState<string | null>(null)
   const [mcpActionError, setMcpActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [rowPending, setRowPending] = useState<Record<string, 'enabling' | 'disabling'>>({})
   const disabled = !state.available || !state.writable
   const promptValue = promptDraft ?? state.systemPrompt
 
@@ -201,22 +211,35 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
     }
   }
 
-  const toggleDisabled = async (server: McpServer, enabled: boolean): Promise<void> => {
+  /**
+   * Flip one row's enablement without blocking the list. The row immediately
+   * shows its target state and a transient starting/stopping label; the Host
+   * call (which starts or stops the child MCP process) runs in the background
+   * and the list refreshes with the real state when it settles.
+   */
+  const toggleDisabled = (server: McpServer, enabled: boolean): void => {
     if (server.entryId === null) return
+    const key = mcpDescriptionKey(server)
     const target = server.scope === 'global'
       ? { scope: 'global' as const }
       : { scope: 'preset' as const, agentPreset: server.presetId ?? '' }
-    setEditorBusy(true)
     setMcpActionError(null)
-    try {
-      await disableMcp({ target, entryId: server.entryId, disabled: !enabled })
-      setNotice(enabled ? t('mcp.notice.enabled') : t('mcp.notice.disabled'))
-      refreshMcps()
-    } catch (cause) {
-      setMcpActionError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setEditorBusy(false)
-    }
+    setRowPending(previous => ({ ...previous, [key]: enabled ? 'enabling' : 'disabling' }))
+    void (async () => {
+      try {
+        await disableMcp({ target, entryId: server.entryId as string, disabled: !enabled })
+        setNotice(enabled ? t('mcp.notice.enabled') : t('mcp.notice.disabled'))
+      } catch (cause) {
+        setMcpActionError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        setRowPending(previous => {
+          const next = { ...previous }
+          delete next[key]
+          return next
+        })
+        refreshMcps()
+      }
+    })()
   }
 
   const switchRow = (
@@ -316,9 +339,10 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
                     key={key}
                     server={server}
                     description={server.description ?? state.mcpDescriptions[key] ?? ''}
+                    pending={rowPending[key] ?? null}
                     onEditDescription={(value) => { updateMcpDescription(key, value) }}
                     onEdit={() => { openEdit(server) }}
-                    onToggleDisabled={(enabled) => { void toggleDisabled(server, enabled) }}
+                    onToggleDisabled={(enabled) => { toggleDisabled(server, enabled) }}
                     actionsDisabled={editorBusy}
                     t={t}
                   />
