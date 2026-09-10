@@ -167,3 +167,10 @@ standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂�
 7. 用 `standingKeyFor` 做实时更新 → 每次整棵重组、重启所有 MCP、3-4 秒。
 8. 直接用模块级 `livePresetMounts` 而不经 loader 解析 → 模块实例不同、返回空、更新无效。
 9. 编辑 preset 后不调 `tree.refresh()` → 文件写了但运行态不变、UI 开关不动。
+10. **自造 message source kind → 用过的会话以后打不开。** `MessageSourceMap` 是可合并扩展的,但 Session 格式
+   的 V2→V3 迁移只认发布版能产出的那张固定 kind 表(`session-format-v2-to-v3/src/payload.ts` 的
+   `SOURCE_KINDS`),遇到不认识的 kind 会**拒绝迁移整份会话**("cannot safely transform unclassified message
+   source; source v2 artifact remains unchanged")。harness 明确否决过"让插件注册迁移"的方案(那会让历史可读性
+   依赖部署)。第三方包一律用**通用 `plugin` kind**:`{ kind: 'plugin', plugin: '<包名>#<loader>', form: ... }`
+   —— 见 `src/sources.ts`。实测代价:本插件旧版写入的 `claude-code`/`codex` 两个 kind 让 **60 个 v2 会话里
+   的 46 个全部无法打开**(v3 会话不受影响,因为 v3 不走迁移)。
