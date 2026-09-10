@@ -5,9 +5,10 @@
  * `<projectRoot>/.claude/CLAUDE.md` and a user-global one at `~/.claude/CLAUDE.md`.
  * The harness's `agent-instructions` deliberately loads only same-directory
  * candidate names (`AGENTS.md`, `CLAUDE.md`), so this package contributes these
- * two Claude Code rule files as an additional instructions-form context, using
- * its own message-source kind so the two loaders never manage each other's
- * messages. It folds the content into the first request the same way
+ * two Claude Code rule files as an additional instructions-form context under
+ * the generic `plugin` source — the `agent-instructions` inbox filters match
+ * only their own kind, so the two loaders never manage each other's messages.
+ * It folds the content into the first request the same way
  * `agent-instructions` does, and is model-visible through a `user` message.
  *
  * @module @deepseek-ai/dsh-claude-compat/instructions
@@ -19,18 +20,10 @@ import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock, UserMessage, MessageSource, ContextFormed } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm'
-
-// Merge-extensible message source: this contributor's injected instructions are
-// logged and replayed under their own kind so `dsh-agent-instructions` inbox
-// filters (which match `kind === 'agent-instructions'`) never touch them.
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    'claude-code': { kind: 'claude-code' } & ContextFormed
-  }
-}
+import { instructionsSource, isInstructionsSource } from './sources.ts'
 
 /** One discovered Claude Code rule file. */
 export interface ClaudeInstructionFile {
@@ -100,7 +93,7 @@ export function injectIntoFirstRequest(decision: PreStepDecision, context: Claud
 /** Insert the injected instructions after the last admitted user message. */
 export function foldContext(messages: UserMessage[], text: string): UserMessage[] {
   const content: ContentBlock[] = [{ type: 'text', text }]
-  const source: MessageSource = { kind: 'claude-code', form: 'instructions' }
+  const source: MessageSource = instructionsSource('claude-code')
   const message = createUserMessage({ content, source })
   const lastIndex = messages.findLastIndex(m => m.role === 'user')
   if (lastIndex < 0) return [...messages, message]
@@ -129,11 +122,11 @@ export function claudeInstructionListener(
     if (decision.messages.length === 0) return decision
     const session = agent.session
     if (session === undefined) return decision
-    // Inject at most once per session: an existing `claude-code` instructions
-    // user message on the surfaced log means these rules were already folded
-    // in, for this session or a resumed one, so do not repeat them.
+    // Inject at most once per session: an existing instructions user message
+    // from this contributor on the surfaced log means these rules were already
+    // folded in, for this session or a resumed one, so do not repeat them.
     if (session.snapshotEvents().some(event =>
-      event.type === 'user/message' && event.data.source.kind === 'claude-code')) return decision
+      event.type === 'user/message' && isInstructionsSource(event.data.source, 'claude-code'))) return decision
     const cwd = session.header?.cwd
     if (cwd === undefined) return decision
     const context = await loadClaudeInstructions(cwd, ctx, config)

@@ -37,6 +37,7 @@ export { MCP_LOADING_MODES, parseMcpLoadingMode, registerMcpTools } from './lazy
 export type { McpLoadingMode } from './lazy-mcp.ts'
 export { mcpRowKey } from './mcp-gate.ts'
 export type { McpPreloadGate, McpRowGateState } from './mcp-gate.ts'
+export { instructionsSource, isInstructionsSource, PLUGIN_ID } from './sources.ts'
 export type { McpEntryConfig, McpTransportConfig, McpSpec, McpTarget } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */

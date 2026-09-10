@@ -337,6 +337,43 @@ async function pathExists$3(path, fs) {
 	}
 }
 //#endregion
+//#region src/sources.ts
+/** Package identity recorded on every injected message this plugin produces. */
+const PLUGIN_ID = "@zhang-guo-wen/dsh-claude-compat";
+/**
+* The source for one contributor's injected instructions. The loader name rides
+* in `plugin` so a transcript row still names which loader supplied the text,
+* while the durable kind stays inside the released set.
+* @param loader - contributor that produced the content.
+* @returns an instructions-form model source owned by this plugin.
+*/
+function instructionsSource(loader) {
+	return {
+		kind: "plugin",
+		plugin: `${PLUGIN_ID}#${loader}`,
+		form: "instructions"
+	};
+}
+/**
+* Whether one logged message source came from this plugin's `<loader>`
+* contributor.
+*
+* The contributors ask this of a session log to avoid folding the same rules in
+* twice. Both shapes answer yes: the current `plugin` source, and the two
+* bespoke kinds this package wrote before it moved onto that source. Reading the
+* legacy names back never writes them again — it only keeps a resumed Session
+* that already carries the content from receiving it a second time.
+* @param source - a logged message's `source` value, of unknown provenance.
+* @param loader - contributor whose earlier injection is being looked for.
+* @returns whether that contributor already supplied instructions here.
+*/
+function isInstructionsSource(source, loader) {
+	if (typeof source !== "object" || source === null) return false;
+	const kind = source.kind;
+	if (kind === loader) return true;
+	return kind === "plugin" && source.plugin === `@zhang-guo-wen/dsh-claude-compat#${loader}`;
+}
+//#endregion
 //#region src/instructions.ts
 /**
 * Claude Code instruction contributor.
@@ -345,9 +382,10 @@ async function pathExists$3(path, fs) {
 * `<projectRoot>/.claude/CLAUDE.md` and a user-global one at `~/.claude/CLAUDE.md`.
 * The harness's `agent-instructions` deliberately loads only same-directory
 * candidate names (`AGENTS.md`, `CLAUDE.md`), so this package contributes these
-* two Claude Code rule files as an additional instructions-form context, using
-* its own message-source kind so the two loaders never manage each other's
-* messages. It folds the content into the first request the same way
+* two Claude Code rule files as an additional instructions-form context under
+* the generic `plugin` source — the `agent-instructions` inbox filters match
+* only their own kind, so the two loaders never manage each other's messages.
+* It folds the content into the first request the same way
 * `agent-instructions` does, and is model-visible through a `user` message.
 *
 * @module @deepseek-ai/dsh-claude-compat/instructions
@@ -397,15 +435,14 @@ function injectIntoFirstRequest(decision, context) {
 }
 /** Insert the injected instructions after the last admitted user message. */
 function foldContext(messages, text) {
+	const content = [{
+		type: "text",
+		text
+	}];
+	const source = instructionsSource("claude-code");
 	const message = createUserMessage({
-		content: [{
-			type: "text",
-			text
-		}],
-		source: {
-			kind: "claude-code",
-			form: "instructions"
-		}
+		content,
+		source
 	});
 	const lastIndex = messages.findLastIndex((m) => m.role === "user");
 	if (lastIndex < 0) return [...messages, message];
@@ -426,7 +463,7 @@ function claudeInstructionListener(ctx, config = {}, isEnabled = () => true) {
 		if (decision.messages.length === 0) return decision;
 		const session = agent.session;
 		if (session === void 0) return decision;
-		if (session.snapshotEvents().some((event) => event.type === "user/message" && event.data.source.kind === "claude-code")) return decision;
+		if (session.snapshotEvents().some((event) => event.type === "user/message" && isInstructionsSource(event.data.source, "claude-code"))) return decision;
 		const cwd = session.header?.cwd;
 		if (cwd === void 0) return decision;
 		const context = await loadClaudeInstructions(cwd, ctx, config);
@@ -492,8 +529,8 @@ async function pathExists$2(path, fs) {
 * Codex keeps its rules in `AGENTS.md`: a global one at `~/.codex/AGENTS.md`
 * and a project-level one at `<projectRoot>/.codex/AGENTS.md`. Like the Claude
 * contributor, this folds them into the first request as a `user` message under
-* its own message-source kind (`codex`) so the `agent-instructions` inbox
-* filters never manage these messages.
+* the generic `plugin` source, so the `agent-instructions` inbox filters never
+* manage these messages.
 *
 * @module @deepseek-ai/dsh-claude-compat/codex
 */
@@ -542,15 +579,14 @@ function injectCodexIntoFirstRequest(decision, context) {
 }
 /** Insert the injected instructions after the last admitted user message. */
 function foldCodexContext(messages, text) {
+	const content = [{
+		type: "text",
+		text
+	}];
+	const source = instructionsSource("codex");
 	const message = createUserMessage({
-		content: [{
-			type: "text",
-			text
-		}],
-		source: {
-			kind: "codex",
-			form: "instructions"
-		}
+		content,
+		source
 	});
 	const lastIndex = messages.findLastIndex((m) => m.role === "user");
 	if (lastIndex < 0) return [...messages, message];
@@ -571,7 +607,7 @@ function codexInstructionListener(ctx, config = {}, isEnabled = () => true) {
 		if (decision.messages.length === 0) return decision;
 		const session = agent.session;
 		if (session === void 0) return decision;
-		if (session.snapshotEvents().some((event) => event.type === "user/message" && event.data.source.kind === "codex")) return decision;
+		if (session.snapshotEvents().some((event) => event.type === "user/message" && isInstructionsSource(event.data.source, "codex"))) return decision;
 		const cwd = session.header?.cwd;
 		if (cwd === void 0) return decision;
 		const context = await loadCodexInstructions(cwd, ctx, config);
@@ -643,10 +679,10 @@ async function pathExists$1(path, fs) {
 * always-on rules into the first request, and folds path-scoped rules in when a
 * matching file is read.
 *
-* The folded content reaches the model as one `user` message under its own
-* `claude-rule` message-source kind, so the `agent-instructions` inbox filters
-* (which match only `agent-instructions`) never manage these messages and the
-* contributor never re-injects a rule already on the surfaced log.
+* The folded content reaches the model as one `user` message under the generic
+* `plugin` source, so the `agent-instructions` inbox filters (which match only
+* `agent-instructions`) never manage these messages and the contributor never
+* re-injects a rule already on the surfaced log.
 *
 * @module @deepseek-ai/dsh-claude-compat/rules
 */
@@ -714,15 +750,14 @@ function injectRulesIntoRequest(decision, text) {
 * @returns the amended message array.
 */
 function foldRulesContext(messages, text) {
+	const content = [{
+		type: "text",
+		text
+	}];
+	const source = instructionsSource("claude-rule");
 	const message = createUserMessage({
-		content: [{
-			type: "text",
-			text
-		}],
-		source: {
-			kind: "claude-rule",
-			form: "instructions"
-		}
+		content,
+		source
 	});
 	const lastIndex = messages.findLastIndex((message) => message.role === "user");
 	if (lastIndex < 0) return [...messages, message];
@@ -815,7 +850,7 @@ function seedNeverReinject(session, state) {
 	for (const rule of state.loaded?.rules ?? []) if (rule.paths === void 0) state.injected.add(rule.absolutePath);
 }
 function hasClaudeRuleOnSurface(session) {
-	return session.snapshotEvents().some((event) => event.type === "user/message" && event.data.source.kind === "claude-rule");
+	return session.snapshotEvents().some((event) => event.type === "user/message" && isInstructionsSource(event.data.source, "claude-rule"));
 }
 function selectRulesToInject(session, state, enteringMessageCount) {
 	const alreadyFolded = hasClaudeRuleOnSurface(session);
@@ -2543,4 +2578,4 @@ async function apply(ctx, config = {}) {
 	new ClaudeCompatMcp(ctx, gate);
 }
 //#endregion
-export { ClaudeCompatMcp, Config, MCP_LOADING_MODES, apply, assertServerName, inject, mcpEntryConfig, mcpRowKey, name, parseMcpLoadingMode, registerMcpTools, specFromEntryConfig };
+export { ClaudeCompatMcp, Config, MCP_LOADING_MODES, PLUGIN_ID, apply, assertServerName, inject, instructionsSource, isInstructionsSource, mcpEntryConfig, mcpRowKey, name, parseMcpLoadingMode, registerMcpTools, specFromEntryConfig };

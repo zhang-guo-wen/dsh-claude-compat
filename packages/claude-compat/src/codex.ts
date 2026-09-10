@@ -4,8 +4,8 @@
  * Codex keeps its rules in `AGENTS.md`: a global one at `~/.codex/AGENTS.md`
  * and a project-level one at `<projectRoot>/.codex/AGENTS.md`. Like the Claude
  * contributor, this folds them into the first request as a `user` message under
- * its own message-source kind (`codex`) so the `agent-instructions` inbox
- * filters never manage these messages.
+ * the generic `plugin` source, so the `agent-instructions` inbox filters never
+ * manage these messages.
  *
  * @module @deepseek-ai/dsh-claude-compat/codex
  */
@@ -16,17 +16,10 @@ import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock, UserMessage, MessageSource, ContextFormed } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm'
-
-// Merge-extensible message source: this contributor's injected instructions are
-// logged and replayed under their own `codex` kind.
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    'codex': { kind: 'codex' } & ContextFormed
-  }
-}
+import { instructionsSource, isInstructionsSource } from './sources.ts'
 
 /** One discovered Codex rule file. */
 export interface CodexInstructionFile {
@@ -96,7 +89,7 @@ export function injectCodexIntoFirstRequest(decision: PreStepDecision, context: 
 /** Insert the injected instructions after the last admitted user message. */
 export function foldCodexContext(messages: UserMessage[], text: string): UserMessage[] {
   const content: ContentBlock[] = [{ type: 'text', text }]
-  const source: MessageSource = { kind: 'codex', form: 'instructions' }
+  const source: MessageSource = instructionsSource('codex')
   const message = createUserMessage({ content, source })
   const lastIndex = messages.findLastIndex(m => m.role === 'user')
   if (lastIndex < 0) return [...messages, message]
@@ -125,11 +118,11 @@ export function codexInstructionListener(
     if (decision.messages.length === 0) return decision
     const session = agent.session
     if (session === undefined) return decision
-    // Inject at most once per session: an existing `codex` instructions user
+    // Inject at most once per session: an existing instructions user
     // message on the surfaced log means these rules were already folded in,
     // for this session or a resumed one, so do not repeat them.
     if (session.snapshotEvents().some(event =>
-      event.type === 'user/message' && event.data.source.kind === 'codex')) return decision
+      event.type === 'user/message' && isInstructionsSource(event.data.source, 'codex'))) return decision
     const cwd = session.header?.cwd
     if (cwd === undefined) return decision
     const context = await loadCodexInstructions(cwd, ctx, config)

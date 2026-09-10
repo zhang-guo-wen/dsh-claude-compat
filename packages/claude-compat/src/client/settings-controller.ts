@@ -230,7 +230,7 @@ export class ContextInjectionController {
       toggle: (name) => { this.toggle(name) },
       updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
       updateMcpDescription: (key, description) => { this.updateMcpDescription(key, description) },
-      setMcpLoading: (mode) => { this.setMcpLoading(mode) },
+      setMcpLoading: (mode) => this.setMcpLoading(mode),
       addMcp: this.authoring.addMcp,
       editMcp: this.authoring.editMcp,
       disableMcp: this.authoring.disableMcp,

@@ -10,10 +10,10 @@
  * always-on rules into the first request, and folds path-scoped rules in when a
  * matching file is read.
  *
- * The folded content reaches the model as one `user` message under its own
- * `claude-rule` message-source kind, so the `agent-instructions` inbox filters
- * (which match only `agent-instructions`) never manage these messages and the
- * contributor never re-injects a rule already on the surfaced log.
+ * The folded content reaches the model as one `user` message under the generic
+ * `plugin` source, so the `agent-instructions` inbox filters (which match only
+ * `agent-instructions`) never manage these messages and the contributor never
+ * re-injects a rule already on the surfaced log.
  *
  * @module @deepseek-ai/dsh-claude-compat/rules
  */
@@ -24,21 +24,13 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { FileSystem, FsDirEntry } from '@deepseek-ai/dsh-fs'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock, UserMessage, MessageSource, ContextFormed } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import picomatch from 'picomatch/posix'
 import { parseYamlFrontmatter } from './frontmatter.ts'
-
-// Merge-extensible message source: rules land on the session log and replay
-// under their own `claude-rule` kind, so they are never managed by the
-// `agent-instructions` inbox filters.
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    'claude-rule': { kind: 'claude-rule' } & ContextFormed
-  }
-}
+import { instructionsSource, isInstructionsSource } from './sources.ts'
 
 /** The `read` tool name that drives path-scoped activation. */
 const READ_TOOL_NAME = 'read'
@@ -145,7 +137,7 @@ export function injectRulesIntoRequest(decision: PreStepDecision, text: string):
  */
 export function foldRulesContext(messages: UserMessage[], text: string): UserMessage[] {
   const content: ContentBlock[] = [{ type: 'text', text }]
-  const source: MessageSource = { kind: 'claude-rule', form: 'instructions' }
+  const source: MessageSource = instructionsSource('claude-rule')
   const message = createUserMessage({ content, source })
   const lastIndex = messages.findLastIndex(message => message.role === 'user')
   if (lastIndex < 0) return [...messages, message]
@@ -260,7 +252,7 @@ function seedNeverReinject(session: Session, state: RuleSessionState): void {
 
 function hasClaudeRuleOnSurface(session: Session): boolean {
   return session.snapshotEvents().some(event =>
-    event.type === 'user/message' && event.data.source.kind === 'claude-rule')
+    event.type === 'user/message' && isInstructionsSource(event.data.source, 'claude-rule'))
 }
 
 function selectRulesToInject(session: Session, state: RuleSessionState, enteringMessageCount: number): ClaudeRule[] {
