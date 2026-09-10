@@ -77,7 +77,11 @@ function parseSpec(text: string, invalid: string): McpSpec {
   }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(invalid)
   const candidate = value as AnyRecord
-  const type = candidate.type
+  // Claude allows omitting `type`: a command implies stdio, a url implies HTTP.
+  const declared = candidate.type
+  const type = declared === undefined
+    ? typeof candidate.command === 'string' ? 'stdio' : typeof candidate.url === 'string' ? 'streamable-http' : undefined
+    : declared
   if (type === 'stdio') {
     const command = candidate.command
     if (typeof command !== 'string' || command.trim() === '') throw new Error(invalid)
