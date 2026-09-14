@@ -2,199 +2,102 @@
 
 English | [中文](README.zh.md)
 
-A standalone plugin for DeepSeek Harness (DSH) that makes the harness work with your existing
-Claude Code / Codex setup — and adds a **Harness 兼容** settings page where you manage MCP servers
-and prompt rules from the Web UI instead of hand-editing YAML.
+A standalone plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) that makes the
+harness work with your existing **Claude Code / Codex** setup, and adds a **Harness 兼容** settings page for managing
+MCP servers and prompt rules from the Web UI instead of hand-editing YAML.
 
-![MCP management](docs/mcp-list.png)
-
-## What you get
-
-- **MCP management, live.** The settings page lists every MCP server (`@deepseek-ai/dsh-mcp-client`
-  row) — global and per agent preset, with its scope, description, and status — and lets you
-  **add / edit / enable / disable** each one. Writes go to the composition file and are applied to
-  the running host immediately, with no restart. Toggling shows a transient `启动中 / 停止中` state
-  while the MCP child process starts or stops, so the list never blocks.
-- **Claude Code compatibility.** Discovers `<root>/.claude/skills/**` into the session skill catalog,
-  folds `.claude/CLAUDE.md` and `~/.claude/CLAUDE.md` into the first request, and folds
-  `.claude/rules/**` — including `paths:`-scoped rules that activate when you read a matching file.
-- **Codex compatibility.** Folds `.codex/AGENTS.md` and `~/.codex/AGENTS.md`.
-- **A system prompt field.** Write a system-level prompt from the settings page; it is injected as a
-  real system-prompt section.
-- **Master toggles.** Turn Claude-rule and Codex-rule injection on or off.
-- **`/btw`.** Ask a side question in a forked, continuable child subagent.
+It does not bundle `@deepseek-ai/*`; those resolve from the host harness at runtime.
 
 ## Screenshots
 
-### 提示词管理 — system prompt and rule toggles
+### MCP 管理 — every configured server, live
 
-![prompt tab](docs/prompt-tab.png)
+Lists each MCP server with its scope, description, and running status, and lets you add, edit, enable, or disable one.
+Changes reach the running host with no restart. Server names are blurred here; the scope, status, and controls are not.
 
-### MCP 管理 — one JSON box, parsed and validated on save
+![MCP management](docs/mcp-list.png)
+
+### MCP 管理 — add or edit a server
+
+Paste Claude-compatible connection JSON; it is parsed and validated on save, so a typo is reported instead of stored.
 
 ![MCP editor](docs/mcp-editor.png)
 
+### 提示词管理 — system prompt and rule toggles
+
+A system-level prompt box plus master switches for Claude-rule and Codex-rule injection.
+
+![Prompt tab](docs/prompt-tab.png)
+
+## What it does
+
+- **MCP management.** Add, edit, enable, and disable MCP servers from the settings page. Global rows and per-preset
+  rows are both listed with their live status. Toggling shows a transient `启动中 / 停止中` while the MCP child process
+  starts or stops, so the list never blocks.
+- **On-demand MCP loading.** A stopped server costs nothing. The model can call `mcp_list`, `mcp_load`, and
+  `mcp_unload` to start a server for the calling session only; the loaded tools never leak into another session.
+  Three loading modes trade tool-list stability against binding quality — see below.
+- **Claude Code compatibility.** Discovers `<root>/.claude/skills/**` into the session skill catalog, folds
+  `.claude/CLAUDE.md` and `~/.claude/CLAUDE.md` into the first request, and folds `.claude/rules/**` — including
+  `paths:`-scoped rules that activate once you read a matching file.
+- **Codex compatibility.** Folds `.codex/AGENTS.md` and `~/.codex/AGENTS.md`.
+- **`/btw`.** Ask a side question in a forked, continuable child subagent.
+
+### MCP loading modes
+
+A row's enable switch and the loading mode answer different questions: the switch says **whether a server may be used
+at all**, the mode says **when an allowed server enters context**.
+
+| Mode | Behavior |
+|---|---|
+| Load all (`eager`) | Allowed servers mount at session start; their tools are always in the request |
+| Dynamic insert (`dynamic`, default) | Allowed servers stay unmounted; `mcp_load` mounts one into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
+| Lazy (`lazy`) | Allowed servers stay unmounted; `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas, and the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
+
+Set it in **设置 → Harness 兼容 → MCP 管理 → MCP loading**. The choice is stored in the user's
+`context-injection` settings namespace and swaps the tool set from the next request on, in every session.
+
+Measured on one preset with four MCP servers: `dynamic` sends **29** tools on the first request (built-ins plus
+`mcp_list`/`mcp_load`/`mcp_unload`), `eager` sends **378**, 348 of them MCP tools.
+
 ## Install
 
-The built `lib/` is committed, so the repository installs and runs directly — no build step.
-
-### From the git repository (recommended)
-
-Install a **release tag** (`v0.1.3-alpha.1`) rather than the default branch, so a later
-work-in-progress commit on `master` is not picked up:
+The built `lib/` is committed, so the repository installs and runs directly — no build step on your machine.
 
 ```sh
-# over HTTPS (public repo)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
+# over HTTPS
+npx @deepseek-ai/dsh plugin --profile web add git+https://github.com/zhang-guo-wen/dsh-claude-compat.git
 
 # or over SSH
+npx @deepseek-ai/dsh plugin --profile web add git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git
+```
+
+Pin a release tag so a later work-in-progress commit on the default branch is not picked up:
+
+```sh
 npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
 ```
 
-`#<ref>` pins a **tag / commit / branch**; the repository root **is** the plugin package, so no
-`path:` is needed. Omit the `#<ref>` part to follow the default branch (not recommended); re-run the
-command with a newer tag to update.
-
-### From a local checkout
+To develop against a local checkout, install the directory. pnpm creates a **symlink**, so a rebuilt `lib/` reaches
+the host on the next start with no reinstall:
 
 ```sh
 npx @deepseek-ai/dsh plugin --profile web add /absolute/path/to/dsh-claude-compat
 ```
 
-A directory install is pnpm's `link:`, so the profile's `node_modules` entry is a **symlink** to the
-checkout and a rebuilt `lib/` reaches the host on the next start with no reinstall.
+Then restart the host and open the settings page:
 
-### In a profile manifest
-
-You do not write this by hand — `dsh plugin add` maintains both lists. It is shown only to describe
-the result:
-
-```json
-{
-  "dsh": { "profile": { "bundles": ["@zhang-guo-wen/dsh-claude-compat"] } },
-  "dependencies": {
-    "@zhang-guo-wen/dsh-claude-compat": "link:/absolute/path/to/dsh-claude-compat"
-  }
-}
+```sh
+npx @deepseek-ai/dsh web
 ```
 
-After installing, run `npx @deepseek-ai/dsh web` and open the settings page.
+You do not edit the profile manifest by hand: `dsh plugin add` adds both the dependency and the bundle entry.
+Remove it, dependency and layer together, with `dsh plugin --profile web remove @zhang-guo-wen/dsh-claude-compat`.
 
-## Managing MCP servers
+## Configuration
 
-Open **设置 → Harness兼容 → MCP 管理**. Every MCP row the harness has configured is listed with its
-scope (`全局` or a preset id), a plugin-owned description, and its live status. Each row has an
-**编辑** button and an enable/disable switch; **新增 MCP** opens the editor.
-
-That server list is a live read of the Cordis Loader, so a change shows up as soon as it is applied:
-
-- **Global** rows use the loader directly and are live immediately.
-- **Preset (agent)** rows write the preset's `agent.cordis.yml` and refresh the preset's standing
-  mount in place, so enabling or disabling one MCP never restarts the others.
-
-### The editor JSON
-
-The editor takes Claude-compatible connection JSON and normalizes it. All of these work:
-
-```json
-{ "type": "stdio", "command": "cmd", "args": ["/c", "npx", "-y", "@upstash/context7-mcp"] }
-```
-
-```json
-{ "context7": { "command": "cmd", "args": ["/c", "npx", "-y", "@upstash/context7-mcp"] } }
-```
-
-```json
-{ "mcpServers": { "context7": { "command": "cmd", "args": ["/c", "npx", "-y", "@upstash/context7-mcp"] } } }
-```
-
-Rules:
-
-- A missing `type` is inferred: a `command` means stdio, a `url` means streamable HTTP.
-- A single-entry map or an `mcpServers` wrapper uses its key as the server name.
-- A bare spec derives the server name from the arguments (`@upstash/context7-mcp` → `context7-mcp`)
-  when the **服务器名** field is left empty.
-- `stdio` needs `command`; `http` / `sse` / `streamable-http` need `url`.
-
-The **配置范围** dropdown lists Global and every agent preset, so you pick a target instead of typing
-an id. **描述** is a plugin-owned label shown in the list, stored in the `context-injection` settings
-namespace — not part of the MCP connection.
-
-### Lazy loading — start a server only when it is needed
-
-Every running MCP server's tool schemas ride every request, so a deployment with a dozen servers
-pays for all of them all the time. Two things work together to avoid that:
-
-1. **Keep a server stopped.** Disable its row in MCP 管理. A disabled row is never mounted, so its
-   tools stay out of the catalog.
-2. **Start it on demand.** The plugin registers three tools the model can call:
-
-   | Tool | What it does |
-   |---|---|
-   | `mcp_list` | The configured servers, their scope, and whether each is running |
-   | `mcp_load(server)` | Starts one server **for the calling session only** and returns the tool names it added |
-   | `mcp_unload(server)` | Stops that session's server again and shrinks the tool list |
-
-The mount is agent-scoped: a server one session loads never appears in another. This is the same
-trade-off as Claude Code's tool search — you pay one extra round trip, and the loaded schema, only
-when you actually need a server.
-
-### Choosing the loading mode
-
-The two controls answer different questions:
-
-- **A row's enable switch** — may this server be used at all. Disabled means never: it is not listed
-  by `mcp_list` and `mcp_load` refuses it.
-- **Settings → Claude Compat → MCP management → MCP loading** — when an allowed server enters
-  context. One of three:
-
-| Mode | Behavior |
-|---|---|
-| Load all (`eager`) | Allowed servers mount at session start, so their tools are always in the request |
-| Dynamic insert (`dynamic`, default) | Allowed servers stay **unmounted by default**; `mcp_load` mounts one into the calling session, so its tools join the request — best tool binding, but the tool list changes once per load |
-| Lazy (`lazy`) | Allowed servers stay **unmounted by default**; `mcp_load` connects over the MCP SDK **without registering anything** and returns the tool schemas, and the model calls them through the fixed `mcp_call` proxy — the tool list never changes, so the request-cache prefix is never invalidated |
-
-Measured on one `standard+MCP` preset (alibaba-devops, lightrag, kingdee, playwright): the first
-request carries **29** tools under `dynamic` (built-ins plus `mcp_list`/`mcp_load`/`mcp_unload`) and
-**378** under `eager`, 348 of which are MCP tools.
-
-Holding a row back is **runtime state**: the plugin unmounts the rows in memory and never rewrites
-your preset file (an `agent-presets` composition is an input, not a persistence target), so switching
-modes cannot pollute configuration. The price is one restart of those MCP child processes per switch.
-
-```yaml
-- name: '@zhang-guo-wen/dsh-claude-compat'
-  config:
-    mcpLoading: lazy   # only while the user document has no such entry
-```
-
-The choice is stored in the user's `context-injection` settings namespace (`mcpLoading` in
-`~/.dsh/settings.yaml`) and **swaps the tool set as soon as it commits**, from the next request on in
-every session. The plugin's `config.mcpLoading` only supplies the default while the user document
-has no entry yet.
-
-## Claude Code / Codex compatibility
-
-### Skills
-
-| Rank | Source | Path |
-|---|---|---|
-| 250 | `project-claude` | `<projectRoot>/.claude/skills` |
-| 550 | `user-claude` | `~/.claude/skills` |
-
-The project root is the nearest ancestor containing `.git`. A skill is
-`<root>/.claude/skills/<name>/SKILL.md` (or a flat `<name>.md`) with YAML frontmatter: required
-`name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and
-`user-invocable`.
-
-### Rules
-
-The project `.claude/CLAUDE.md` and the global `~/.claude/CLAUDE.md` are folded into the first request
-as `user` messages under the `claude-code` source kind. Rules under `.claude/rules/**` (project) and
-`~/.claude/rules/**` (user) fold under `claude-rule`: a rule whose frontmatter carries a `paths:` glob
-list is path-scoped and folds after a `read` of a matching file; a rule without `paths` is always-on.
-
-### Configuration
+Every field has a working default; the table is for overriding one. Fields marked with a settings-page control can be
+changed there instead of in the composition.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -202,40 +105,42 @@ list is path-scoped and folds after a `read` of a matching file; a rule without 
 | `claudeHome` | `$CLAUDE_HOME` or `~/.claude` | Claude Code home, scanned for `skills` and `CLAUDE.md` |
 | `codexHome` | `$CODEX_HOME` or `~/.codex` | Codex home, scanned for `AGENTS.md` |
 | `projectRootMarkers` | `['.git']` | Directory entries that identify the project root |
-| `includeProjectRoot` | `true` | Scan the project `.claude/skills` root |
-| `includeGlobalRoot` | `true` | Scan the user `~/.claude/skills` root |
-| `includeProjectRule` | `true` | Load the project `.claude/CLAUDE.md` rule |
-| `includeGlobalRule` | `true` | Load the global `~/.claude/CLAUDE.md` rule |
-| `includeProjectRules` | `true` | Fold the project `.claude/rules/**` tree |
-| `includeGlobalRules` | `true` | Fold the user `~/.claude/rules/**` tree |
+| `includeProjectRoot` / `includeGlobalRoot` | `true` | Scan the project / user `.claude/skills` root |
+| `includeProjectRule` / `includeGlobalRule` | `true` | Load the project / global `CLAUDE.md` rule |
+| `includeProjectRules` / `includeGlobalRules` | `true` | Fold the project / user `.claude/rules/**` tree |
 | `maxRuleSourceBytes` | `1048576` | Maximum UTF-8 bytes read from one rule file |
 | `maxRuleRenderBytes` | `262144` | Maximum UTF-8 bytes rendered in one rules batch |
-| `claude` / `codex` | `true` | Rule-injection master toggles (also editable from the settings page) |
+| `claude` / `codex` | `true` | Rule-injection master toggles (settings page) |
+| `mcpLoading` | `dynamic` | MCP loading mode (settings page) |
 | `maxQuestionBytes` | `4096` | Maximum UTF-8 bytes in the `/btw` side question |
 | `provider` | `fork` | The `ctx.subagents` fork provider name used by `/btw` |
 
+```yaml
+- name: '@zhang-guo-wen/dsh-claude-compat'
+  config:
+    mcpLoading: lazy
+```
+
 ## Known limitations
 
-- **No skill watcher** — `.claude/skills` is discovered on `list()`; add/rename/delete is picked up
-  when discovery runs again.
-- **Rules fold once per session** — `.claude/CLAUDE.md`, `~/.claude/CLAUDE.md`, and `.codex/AGENTS.md`
-  are read at the first request; later edits are not re-read mid-session.
-- **Path-scoped rules trigger on `read` only** — `write` / `edit` do not activate them.
-- **Enabling an MCP still takes the child process's own startup time** (`npx -y …` / `uvx …` usually
-  1–3s). The UI stays responsive; installing the server as a direct executable shortens it.
+- **No skill watcher** — `.claude/skills` is discovered when the catalog is listed; an add, rename, or delete is picked
+  up on the next discovery.
+- **Rules fold once per session** — `.claude/CLAUDE.md`, `~/.claude/CLAUDE.md`, and `.codex/AGENTS.md` are read at the
+  first request; later edits are not re-read mid-session.
+- **Path-scoped rules trigger on `read` only** — `write` and `edit` do not activate them.
+- **Enabling an MCP still waits for the child process to start** (`npx -y …` / `uvx …` usually 1–3s). The UI stays
+  responsive; installing the server as a direct executable shortens it.
 
 ## Development
 
-See [AGENTS.md](AGENTS.md) for the build, the Cordis/Typert plugin contract, and the pitfalls.
+[AGENTS.md](AGENTS.md) owns the build, the Cordis/Typert plugin contract, and the pitfalls.
 
 ```sh
 npm run build      # host (tsdown) + client (rolldown ModuleLoader handoff)
+npm run typecheck
 ```
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE). It is an OSI-approved, permissive license: commercial
-use, modification, and redistribution are permitted, and every contributor grants a copyright
-license plus an express patent grant (Section 3).
-
-This product includes MIT-licensed portions derived from DeepSeek Harness; see [NOTICE](NOTICE).
+Apache License 2.0 — see [LICENSE](LICENSE). This product includes MIT-licensed portions derived from DeepSeek
+Harness; see [NOTICE](NOTICE). Not affiliated with or endorsed by Claude Code, Codex, or their owners.
