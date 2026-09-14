@@ -6,7 +6,7 @@ A standalone plugin for DeepSeek Harness (DSH) that makes the harness work with 
 Claude Code / Codex setup — and adds a **Harness 兼容** settings page where you manage MCP servers
 and prompt rules from the Web UI instead of hand-editing YAML.
 
-![MCP management](packages/claude-compat/docs/mcp-list.png)
+![MCP management](docs/mcp-list.png)
 
 ## What you get
 
@@ -28,11 +28,11 @@ and prompt rules from the Web UI instead of hand-editing YAML.
 
 ### 提示词管理 — system prompt and rule toggles
 
-![prompt tab](packages/claude-compat/docs/prompt-tab.png)
+![prompt tab](docs/prompt-tab.png)
 
 ### MCP 管理 — one JSON box, parsed and validated on save
 
-![MCP editor](packages/claude-compat/docs/mcp-editor.png)
+![MCP editor](docs/mcp-editor.png)
 
 ## Install
 
@@ -45,36 +45,35 @@ work-in-progress commit on `master` is not picked up:
 
 ```sh
 # over HTTPS (public repo)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
 
 # or over SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
 ```
 
-The spec has two parts: `#<ref>` pins a **tag / commit / branch**, and
-`&path:packages/claude-compat` selects the plugin package inside the repository (pnpm's
-subdirectory git spec). Omit the `#<ref>&` part to follow the default branch (not recommended);
-re-run the command with a newer tag to update.
+`#<ref>` pins a **tag / commit / branch**; the repository root **is** the plugin package, so no
+`path:` is needed. Omit the `#<ref>` part to follow the default branch (not recommended); re-run the
+command with a newer tag to update.
 
 ### From a local checkout
 
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add /absolute/path/to/dsh-claude-compat/packages/claude-compat
+npx @deepseek-ai/dsh plugin --profile web add /absolute/path/to/dsh-claude-compat
 ```
 
-A `file:` dependency installs a **copy**, so a rebuild in the checkout does not reach the running
-host until you reinstall. For a live link while developing, use `pnpm link` instead (see
-[AGENTS.md](AGENTS.md)).
+A directory install is pnpm's `link:`, so the profile's `node_modules` entry is a **symlink** to the
+checkout and a rebuilt `lib/` reaches the host on the next start with no reinstall.
 
 ### In a profile manifest
 
-Either form also works as a plain profile dependency:
+You do not write this by hand — `dsh plugin add` maintains both lists. It is shown only to describe
+the result:
 
 ```json
 {
   "dsh": { "profile": { "bundles": ["@zhang-guo-wen/dsh-claude-compat"] } },
   "dependencies": {
-    "@zhang-guo-wen/dsh-claude-compat": "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+    "@zhang-guo-wen/dsh-claude-compat": "link:/absolute/path/to/dsh-claude-compat"
   }
 }
 ```

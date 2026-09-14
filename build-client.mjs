@@ -35,7 +35,13 @@ const cssModulePlugin = {
       minify: true,
     })
     const classMap = {}
-    for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+    // lightningcss's `exports` object carries no stable key order, so an
+    // unsorted walk emits the same entries in a different sequence on every
+    // build: behaviourally identical, but a different byte-for-byte artifact
+    // and a spurious diff in the committed lib/. Sort the local names.
+    for (const local of Object.keys(cssExports ?? {}).sort()) {
+      classMap[local] = cssExports[local].name
+    }
     const cssText = String(code)
     const tagId = HANDOFF_ID + '/' + fileId.split(/[\\/]/).pop()
     return [

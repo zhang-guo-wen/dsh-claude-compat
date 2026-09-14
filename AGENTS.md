@@ -6,11 +6,16 @@
 
 ## 目录
 
-- `packages/claude-compat/src/` —— host 入口 `index.ts`;浏览器半边在 `src/client/`。
-- `packages/claude-compat/lib/` —— 构建产物:**已提交进仓库**(`index.mjs` host + `client.js` 浏览器 handoff),
+仓库根**就是**包:`package.json` 即 `@zhang-guo-wen/dsh-claude-compat`。
+这不是风格选择——`dsh plugin add <git-url>` 取的是仓库根,包放在 `packages/*` 下会被装成错误的东西。
+
+- `src/` —— host 入口 `index.ts`;浏览器半边在 `src/client/`。
+- `lib/` —— 构建产物:**已提交进仓库**(`index.mjs` host + `client.js` 浏览器 handoff),
   这样别人可以直接从 git 安装。改完源码**记得 `npm run build` 并把 `lib/` 一起提交**。
-- `packages/claude-compat/cordis.patch.yml` —— 把插件行插入组合的 bundle 层。
-- `packages/claude-compat/src/remote.ts` —— 手写的客户端 `TYPERT_REMOTE` 贡献对象。
+- `cordis.patch.yml` —— 把插件行插入组合的 bundle 层。
+- `src/remote.ts` —— 手写的客户端 `TYPERT_REMOTE` 贡献对象。
+- `docs/implementation.md` —— 实现说明(设计理念、源码地图、Model Experience)。
+  它与根 `README.md`(面向使用者)内容不同,扁平化时从旧的包内 `README.md` 保留下来。
 
 ## 构建
 
@@ -130,16 +135,23 @@ standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂�
 
 ## 部署
 
-插件装进 `~/.dsh/profiles/<name>/node_modules/@zhang-guo-wen/dsh-claude-compat`。
-**注意:`file:` 依赖在 profile 里可能是物理拷贝而非 junction** —— 那时改源码/重建**不会**影响正在跑的 dsh。
-要么重装依赖建成 junction,要么手动把新 `lib/` 同步进 profile。client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
+用官方命令安装,它把参数转发给 profile 目录里的 pnpm,**并自行维护 profile 清单**(依赖与 `dsh.profile.bundles` 一起加):
+
+```sh
+dsh plugin --profile web add C:/02-codespace/deepseek-harness/dsh-claude-compat   # 本地开发
+dsh plugin --profile web add github:zhang-guo-wen/dsh-claude-compat               # git 源
+```
+
+本地目录安装时 pnpm 建的是 **symlink(记作 `link:`)** —— 所以重建 `lib/` 后**重启即生效,无需重装**。
+`file:` 依赖则可能退化成物理拷贝,那时改源码不会影响正在跑的 dsh,要重装或手动同步 `lib/`。
+client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
 
 ## 发版(Release)
 
 `lib/` 是提交进仓库的,所以**发版 = 改版本号 + 构建 + 提交产物 + 打 tag**。别人按 tag 安装,
 `master` 上的临时提交不会被他们拿到。
 
-1. 改 `packages/claude-compat/package.json` 的 `version`。
+1. 改根 `package.json` 的 `version`。
 2. `npm run build`,确认 `lib/index.mjs` 与 `lib/client.js` 是最新。
 3. 提交源码与 `lib/`(不要把 `lib/` 落在外面的工作区)。
 4. 打带注释的 tag 并推送:
@@ -149,11 +161,11 @@ standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂�
    git push origin master --follow-tags
    ```
 
-5. 验证安装(子目录 + tag 组合,两步用 `&` 相连):
+5. 验证安装(仓库根即包,不再需要 `path:` 参数):
 
    ```sh
-   npx @deepseek-ai/dsh plugin --profile web add \
-     "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v<version>&path:packages/claude-compat"
+   dsh plugin --profile web add \
+     "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v<version>"
    ```
 
 ## 易崩清单

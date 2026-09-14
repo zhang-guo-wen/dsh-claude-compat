@@ -6,7 +6,7 @@
 Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 —— **在网页里管理 MCP 服务器
 和提示词规则,不用再手改 YAML**。
 
-![MCP 管理](packages/claude-compat/docs/mcp-list.png)
+![MCP 管理](docs/mcp-list.png)
 
 ## 有什么用
 
@@ -26,11 +26,11 @@ Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 �
 
 ### 提示词管理 —— 系统提示词与规则开关
 
-![提示词管理](packages/claude-compat/docs/prompt-tab.png)
+![提示词管理](docs/prompt-tab.png)
 
 ### MCP 管理 —— 一个 JSON 框,保存时解析并校验
 
-![新增 MCP](packages/claude-compat/docs/mcp-editor.png)
+![新增 MCP](docs/mcp-editor.png)
 
 ## 安装
 
@@ -42,33 +42,33 @@ Claude Code / Codex 配置,并在设置页加一个 **Harness 兼容** 面板 �
 
 ```sh
 # HTTPS(公开仓库)
-npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+https://github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
 
 # 或 SSH
-npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1&path:packages/claude-compat"
+npx @deepseek-ai/dsh plugin --profile web add "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#v0.1.3-alpha.1"
 ```
 
-写法分两段:`#<ref>` 锁定 **tag / commit / 分支**,`&path:packages/claude-compat` 指定仓库内的插件包
-(pnpm 的子目录 git 写法)。去掉 `#<ref>&` 就会跟随默认分支(不推荐);换新 tag 重跑即可升级。
+`#<ref>` 锁定 **tag / commit / 分支**;仓库根**就是**插件包,所以不需要 `path:` 参数。
+去掉 `#<ref>` 就会跟随默认分支(不推荐);换新 tag 重跑即可升级。
 
 ### 从本地 checkout 安装
 
 ```sh
-npx @deepseek-ai/dsh plugin --profile web add /绝对路径/dsh-claude-compat/packages/claude-compat
+npx @deepseek-ai/dsh plugin --profile web add /绝对路径/dsh-claude-compat
 ```
 
-`file:` 依赖装的是**拷贝**,所以本地改完重建**不会**影响正在跑的 host,要重装才生效;
-开发时想要实时联动请用 `pnpm link`(见 [AGENTS.md](AGENTS.md))。
+目录安装走的是 pnpm 的 `link:`,profile 的 `node_modules` 里是**软链**指向 checkout,
+所以重建后的 `lib/` 下次启动即生效,无需重装。
 
 ### 在 profile 清单里声明
 
-也可以直接作为 profile 依赖:
+这个清单**不用手写**——`dsh plugin add` 会同时维护两个列表。此处仅说明结果:
 
 ```json
 {
   "dsh": { "profile": { "bundles": ["@zhang-guo-wen/dsh-claude-compat"] } },
   "dependencies": {
-    "@zhang-guo-wen/dsh-claude-compat": "git+ssh://git@github.com/zhang-guo-wen/dsh-claude-compat.git#path:packages/claude-compat"
+    "@zhang-guo-wen/dsh-claude-compat": "link:/绝对路径/dsh-claude-compat"
   }
 }
 ```
