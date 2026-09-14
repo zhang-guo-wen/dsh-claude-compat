@@ -18,6 +18,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the slot registry Context merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the Remote namespaces this plugin reads (ctx.remote.pluginInventory).
+// The namespace map entry itself is declared by the Host package's generated
+// remote-client augmentation, which only applies once that module is in the
+// program; `dsh-api-remotes/client` alone leaves `ctx.remote.pluginInventory` as
+// `any`.
+import type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { ContextInjectionSection } from './ContextInjectionSection.tsx'

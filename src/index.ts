@@ -38,7 +38,8 @@ export type { McpLoadingMode } from './lazy-mcp.ts'
 export { mcpRowKey } from './mcp-gate.ts'
 export type { McpPreloadGate, McpRowGateState } from './mcp-gate.ts'
 export { instructionsSource, isInstructionsSource, PLUGIN_ID } from './sources.ts'
-export type { McpEntryConfig, McpTransportConfig, McpSpec, McpTarget } from './types.ts'
+export type { McpSpec, McpTarget } from './types.ts'
+export type { McpEntryConfig, McpTransportConfig } from './mcp-config.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'claude-compat'
@@ -81,7 +82,7 @@ export const Config: Schema<Config> = z.object({
   codex: z.boolean().default(true),
   maxQuestionBytes: z.number().step(1).min(1).default(4096),
   provider: z.string().min(1).default('fork'),
-  mcpLoading: z.string().default('dynamic'),
+  mcpLoading: z.union(['eager', 'dynamic', 'lazy']).default('dynamic'),
 })
 
 /**
@@ -153,7 +154,13 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     })
   }
   // `/btw` side-question command (forked continuable child subagent).
-  commandBtwApply(ctx, { maxQuestionBytes: config.maxQuestionBytes, provider: config.provider })
+  // Only forward the two fields the command actually reads: under
+  // `exactOptionalPropertyTypes` an optional property does not accept an
+  // explicitly `undefined` value.
+  commandBtwApply(ctx, {
+    ...(config.maxQuestionBytes === undefined ? {} : { maxQuestionBytes: config.maxQuestionBytes }),
+    ...(config.provider === undefined ? {} : { provider: config.provider }),
+  })
 
   // MCP authoring Remote: register the `claudeCompatMcp` Typert service so the
   // browser half can mount it with `ctx.remote.$mount`. The service resolves

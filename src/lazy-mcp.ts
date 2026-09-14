@@ -176,7 +176,9 @@ async function connectLazy(config: McpEntryConfig): Promise<{ client: LazyClient
   }
   let transport: unknown
   if (config.transport === 'stdio') {
-    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js') as {
+    // The SDK's own transport options do not overlap this structural cast, so
+    // it goes through `unknown`.
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js') as unknown as {
       StdioClientTransport: new (options: Record<string, unknown>) => unknown
     }
     transport = new StdioClientTransport({
