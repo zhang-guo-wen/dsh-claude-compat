@@ -41,7 +41,10 @@ A system-level prompt box plus master switches for Claude-rule and Codex-rule in
   `.claude/CLAUDE.md` and `~/.claude/CLAUDE.md` into the first request, and folds `.claude/rules/**` — including
   `paths:`-scoped rules that activate once you read a matching file.
 - **Codex compatibility.** Folds `.codex/AGENTS.md` and `~/.codex/AGENTS.md`.
-- **`/btw`.** Ask a side question in a forked, continuable child subagent.
+- **`/btw`.** Ask a side question in a Session forked from the current one. The fork is anchored at the last
+  completed turn, so a question asked mid-turn forks from the last finished turn, and the new Session keeps
+  the parent's completed turns as its own history. The answer appears in a card inside the composer; when the
+  answer lands, the card closes and the forked Session is archived.
 
 ### MCP loading modes
 
@@ -113,7 +116,6 @@ changed there instead of in the composition.
 | `claude` / `codex` | `true` | Rule-injection master toggles (settings page) |
 | `mcpLoading` | `dynamic` | MCP loading mode (settings page) |
 | `maxQuestionBytes` | `4096` | Maximum UTF-8 bytes in the `/btw` side question |
-| `provider` | `fork` | The `ctx.subagents` fork provider name used by `/btw` |
 
 ```yaml
 - name: '@zhang-guo-wen/dsh-claude-compat'

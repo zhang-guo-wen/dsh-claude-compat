@@ -45,8 +45,11 @@ host 侧:`class X extends TypertRemoteService`,构造里 `super(ctx, '<namespace
 
 client 侧:`await ctx.remote.$mount(TYPERT_REMOTE)`,之后用 `ctx.get('remote.<namespace>')` 调用。
 
-- 客户端贡献对象是 `{ package, descriptors }`;`descriptors` 里每个参数/结果的 codec 必须 `mode: 'strict'`
-  且带 `schema.parse`(可直接 `{ parse: v => v }`)。
+- 客户端贡献对象是 `{ package, descriptors }`;`descriptors` 里每个参数/结果的 codec 必须 `mode: 'strict'`。
+  **两种 schema 座位都要带**:老 host 校验 `schema.parse`,自 `perf(typert): materialize generated schemas on
+  first use` 起的 host 改为要求 `create()` 工厂,缺它时 `ctx.remote.$mount` 抛
+  `strict codec has no create() factory`,整个 client 半边直接加载失败(浏览器只显示 "Failed to load plugins",
+  不打印原因)。emit 两个字段的 `codec()` 在 `src/remote.ts`,注释里写了何时能去掉断言。
 - 它与 host 的 `typert.host.js` manifest(`{ package, face, schemas, model, invocations }`)是**两种不同形状**,不要混用。
 - 独立包可以手写 `TYPERT_REMOTE` 走通这条通道,不必跑 typert 生成器(生成器要求 `tsconfig.host.json` +
   完整解析 `@deepseek-ai/*` 类型,在独立仓里代价高且易崩)。

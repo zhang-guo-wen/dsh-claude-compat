@@ -17,6 +17,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the slot registry Context merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: declares the overlay slot this plugin's card registers into.
+import type {} from './slot-declarations.ts'
 // Type-only: the Remote namespaces this plugin reads (ctx.remote.pluginInventory).
 // The namespace map entry itself is declared by the Host package's generated
 // remote-client augmentation, which only applies once that module is in the
@@ -26,6 +28,9 @@ import type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { ContextInjectionSection } from './ContextInjectionSection.tsx'
+import { BtwCard, type BtwCardInjected } from './BtwCard.tsx'
+import { BtwCardRegistry, sessionStreamFactory } from './btw-card-controller.ts'
+import { NS as BTW_NS, en as btwEn, zh as btwZh, type BtwCardKey } from './locales-btw.ts'
 import { en, NS, zh, type ContextInjectionSectionKey } from './locales.ts'
 import {
   CONTEXT_INJECTION_NS,
@@ -56,11 +61,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** This plugin's settings section copy. */
     'settings.contextInjection': ContextInjectionSectionKey
+    /** This plugin's `/btw` answer card copy. */
+    'claudeCompatBtw': BtwCardKey
   }
 }
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory']
+export const inject = [
+  'slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory',
+  'remote.session', 'workspaces',
+]
 
 /** The namespace service this plugin mounts itself — fetched via `ctx.get`, never injected. */
 interface ClaudeCompatMcpNamespace {
@@ -135,6 +145,35 @@ export async function apply(ctx: Context): Promise<void> {
     locale: NS,
     inject: () => controller.inject(),
   }, ContextInjectionSection))
+
+  // `/btw` answer card. The Host handler owns the fork and the prompt; this
+  // half only reads the receipt the executor publishes in this process and
+  // follows the forked Session it names. The card is keyed by the Session that
+  // asked, because the overlay entry renders once per open Session.
+  ctx.effect(() => ctx.locale.register(BTW_NS, { zh: btwZh, en: btwEn }), 'claude-compat: btw dictionaries')
+  const cards = new BtwCardRegistry(
+    (sessionId, onChange, onFailure) =>
+      sessionStreamFactory(ctx.remote.session, sessionId, onChange, onFailure),
+    // The registry owns the archive set; the plugin only names the Session.
+    sessionId => ctx.workspaces.archiveSession(sessionId),
+  )
+  ctx.effect(() => () => { cards.dispose() }, 'claude-compat: btw cards')
+  ctx.effect(
+    () => ctx.on('command/executed', (sessionId, name, result) => {
+      cards.observe(String(sessionId), name, result)
+    }),
+    'claude-compat: btw cards follow command/executed',
+  )
+  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+    name: 'conversation.input.overlay',
+    id: 'btw-card',
+    order: 20,
+    locale: BTW_NS,
+    inject: (): BtwCardInjected => ({
+      hooks: { btwCard: cards.observable() },
+      dismiss: sessionId => { cards.dismiss(sessionId) },
+    }),
+  }, BtwCard))
 }
 
 

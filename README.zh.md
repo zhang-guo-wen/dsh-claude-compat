@@ -37,7 +37,9 @@
 - **Claude Code 兼容。** 发现 `<root>/.claude/skills/**` 进会话技能目录；把 `.claude/CLAUDE.md` 与
   `~/.claude/CLAUDE.md` 折进首个请求；折入 `.claude/rules/**`，其中带 `paths:` 的规则会在你读取匹配文件后生效。
 - **Codex 兼容。** 折入 `.codex/AGENTS.md` 与 `~/.codex/AGENTS.md`。
-- **`/btw`。** 在可继续的 fork 子代理里问一个侧边问题。
+- **`/btw`。** 从当前会话分叉出的新会话里问一个侧边问题。分叉锚定在最后一个已完成的回合，所以回合进行中
+  提问会从上一个已结束的回合分叉，新会话把父会话的已完成回合当作自己的历史。答案显示在输入框内的卡片里；
+  答案落地后卡片自动收起，并归档那个分叉会话。
 
 ### MCP 加载模式
 
@@ -106,7 +108,6 @@ npx @deepseek-ai/dsh web
 | `claude` / `codex` | `true` | 规则注入总开关（设置页） |
 | `mcpLoading` | `dynamic` | MCP 加载模式（设置页） |
 | `maxQuestionBytes` | `4096` | `/btw` 侧边问题的最大 UTF-8 字节 |
-| `provider` | `fork` | `/btw` 使用的 `ctx.subagents` fork 提供器名 |
 
 ```yaml
 - name: '@zhang-guo-wen/dsh-claude-compat'

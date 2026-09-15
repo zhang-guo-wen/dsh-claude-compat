@@ -45,7 +45,7 @@ export type { McpEntryConfig, McpTransportConfig } from './mcp-config.ts'
 export const name = 'claude-compat'
 
 /** Services required by this plugin. `systemPrompt` and `settings` are probed lazily. */
-export const inject = ['skills', 'commands', 'sessionProjections', 'subagents']
+export const inject = ['skills', 'commands', 'sessionProjections']
 
 /** Config forwarded to the provider, both instruction contributors, the rule contributor, the namespace, and `/btw`. */
 export interface Config
@@ -54,8 +54,6 @@ export interface Config
   codexHome?: string
   /** Maximum UTF-8 bytes in the `/btw` side question. */
   maxQuestionBytes?: number
-  /** The `ctx.subagents` fork provider name (default `fork`). */
-  provider?: string
   /**
    * How MCP servers load: `eager` (every enabled row mounts at preset mount),
    * `dynamic` (on-demand tools mount a server into the calling session; the
@@ -81,7 +79,6 @@ export const Config: Schema<Config> = z.object({
   claude: z.boolean().default(true),
   codex: z.boolean().default(true),
   maxQuestionBytes: z.number().step(1).min(1).default(4096),
-  provider: z.string().min(1).default('fork'),
   mcpLoading: z.union(['eager', 'dynamic', 'lazy']).default('dynamic'),
 })
 
@@ -153,13 +150,11 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       text: () => flags().systemPrompt,
     })
   }
-  // `/btw` side-question command (forked continuable child subagent).
-  // Only forward the two fields the command actually reads: under
-  // `exactOptionalPropertyTypes` an optional property does not accept an
-  // explicitly `undefined` value.
+  // `/btw` side-question command (forks the session and delivers the question).
+  // Only forward the field the command reads: under `exactOptionalPropertyTypes`
+  // an optional property does not accept an explicitly `undefined` value.
   commandBtwApply(ctx, {
     ...(config.maxQuestionBytes === undefined ? {} : { maxQuestionBytes: config.maxQuestionBytes }),
-    ...(config.provider === undefined ? {} : { provider: config.provider }),
   })
 
   // MCP authoring Remote: register the `claudeCompatMcp` Typert service so the

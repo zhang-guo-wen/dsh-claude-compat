@@ -24,8 +24,28 @@ export const REMOTE_NAMESPACE = 'claudeCompatMcp'
 /** Permissive strict codec: accepts any value, returns it unchanged. */
 const passthrough: TypertSchema<unknown> = { parse: value => value }
 
+/**
+ * One strict codec over {@link passthrough}.
+ *
+ * Both schema seats carry the same parse contract because the Host's Typert
+ * registry changed the strict codec shape: Hosts up to
+ * `perf(typert): materialize generated schemas on first use` validate
+ * `schema.parse`, later ones require a `create()` factory and call it when a
+ * boundary first uses the codec (`validateCodec` rejects a strict codec
+ * without it). The published `@deepseek-ai/dsh-typert-protocol` release this
+ * package dev-depends on still declares `schema` alone, so the literal cannot
+ * satisfy those types while carrying `create`; drop the assertion once a
+ * published protocol version declares `create`.
+ * @param typeSymbol - generated-style type symbol naming this codec.
+ * @returns the strict codec handed to `ctx.remote.$mount`.
+ */
 function codec(typeSymbol: string): TypertCodec {
-  return { mode: 'strict', typeSymbol, schema: passthrough }
+  return {
+    mode: 'strict' as const,
+    typeSymbol,
+    schema: passthrough,
+    create: () => passthrough,
+  } as TypertCodec
 }
 
 function descriptor(method: string): InvocationDescriptor {
