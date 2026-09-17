@@ -48,6 +48,8 @@ import type {
   DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
+  ListMcpToolsRequest,
+  ListMcpToolsResult,
   McpGateStateRequest,
   McpGateStateResult,
   McpMutationResult,
@@ -78,6 +80,7 @@ interface ClaudeCompatMcpNamespace {
   editMcp(request: EditMcpRequest): Promise<RemoteResult<McpMutationResult>>
   disableMcp(request: DisableMcpRequest): Promise<RemoteResult<McpMutationResult>>
   describeMcp(request: DescribeMcpRequest): Promise<RemoteResult<DescribeMcpResult>>
+  listMcpTools(request: ListMcpToolsRequest): Promise<RemoteResult<ListMcpToolsResult>>
   gateState(request: McpGateStateRequest): Promise<RemoteResult<McpGateStateResult>>
 }
 
@@ -117,6 +120,7 @@ export async function apply(ctx: Context): Promise<void> {
     editMcp: request => unwrapRemote(() => mcpMgr().editMcp(request)),
     disableMcp: request => unwrapRemote(() => mcpMgr().disableMcp(request)),
     describeMcp: request => unwrapRemote(() => mcpMgr().describeMcp(request)),
+    listMcpTools: request => unwrapRemote(() => mcpMgr().listMcpTools(request)),
   }
   const presets = async (): Promise<readonly McpPresetOption[]> => {
     const result = await ctx.remote.pluginInventory.list()

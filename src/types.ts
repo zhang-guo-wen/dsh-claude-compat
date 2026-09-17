@@ -96,6 +96,32 @@ export interface McpMutationResult {
   readonly disabled: boolean
 }
 
+/** One tool a connection publishes, as the editor's enable/disable list shows it. */
+export interface McpToolRow {
+  /** The server's own tool name; filter rules match exactly this name. */
+  readonly name: string
+  /** The server's description, empty when it declared none. */
+  readonly description: string
+}
+
+/**
+ * Request the tools one connection spec publishes. The editor sends its current
+ * form value rather than a stored row, so a listing reflects unsaved edits and
+ * works for a row that does not exist yet.
+ */
+export interface ListMcpToolsRequest {
+  /** Transport specification to connect with. */
+  readonly spec: McpSpec
+  /** Namespace used in the connection's diagnostics. */
+  readonly serverName: string
+}
+
+/** The tools one connection spec publishes, read from a live connection. */
+export interface ListMcpToolsResult {
+  /** Published tools in the server's own order. */
+  readonly tools: readonly McpToolRow[]
+}
+
 /** Request for the runtime preload gate's current view. */
 export interface McpGateStateRequest {
   /** Placeholder field: the gate state is host-wide, so the request carries none. */

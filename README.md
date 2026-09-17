@@ -36,6 +36,10 @@ A system-level prompt box plus master switches for Claude-rule and Codex-rule in
   starts or stops, so the list never blocks.
 - **On-demand MCP loading.** A stopped server costs nothing. The model can call `mcp_list`, `mcp_load`, and
   `mcp_unload` to start a server for the calling session only; the loaded tools never leak into another session.
+  Connections are per-session, and a session that ends closes the connections it opened.
+- **MCP tool filters.** The MCP edit dialog lists the methods a server publishes with every one checked; an unchecked
+  method never enters context — neither listed nor callable. Wildcards are available by writing
+  `context-injection.mcpTools` yourself. See below.
   Three loading modes trade tool-list stability against binding quality — see below.
 - **Claude Code compatibility.** Discovers `<root>/.claude/skills/**` into the session skill catalog, folds
   `.claude/CLAUDE.md` and `~/.claude/CLAUDE.md` into the first request, and folds `.claude/rules/**` — including
@@ -62,6 +66,63 @@ Set it in **设置 → Harness 兼容 → MCP 管理 → MCP loading**. The choi
 
 Measured on one preset with four MCP servers: `dynamic` sends **29** tools on the first request (built-ins plus
 `mcp_list`/`mcp_load`/`mcp_unload`), `eager` sends **378**, 348 of them MCP tools.
+
+### Processes and lifetime
+
+Under `dynamic` / `lazy`, a server that has not been loaded starts **no process at all** — MCP is stopped when the
+session begins, until some `mcp_load`.
+
+Once loaded, connections are per-session: a repeated `mcp_load` in one session reuses the same one, while **different
+sessions each get their own** (for stdio, one child process each); subagents and forked sessions count as separate
+sessions. **A session that ends closes the connections it opened**, with no `mcp_unload` required. `eager` is the
+opposite — the preset is a standing mount, so one shared instance serves every session.
+
+> MCP rows configured on the **global plane** (written directly into `cordis.yml`) are outside on-demand loading:
+> they always start, as if permanently `eager`. Put a server in a preset to make it on-demand.
+
+### MCP tool filters
+
+A server often publishes dozens of tools while a session uses a few. Once filtered, **only the tools the rules admit
+are handed to the model when the server loads**: a hidden tool is absent from the `mcp_load` result and `mcp_call`
+refuses to invoke it.
+
+**In the settings page:** Settings → Harness 兼容 → MCP 管理 → a row's **Edit** → the **Tools** block at the bottom of
+the dialog.
+
+Opening it connects to that server once, lists the methods it publishes, and **checks every one of them**. Unchecking a
+method disables it; the change applies on save. The block carries an `enabled/total` count, `Load tools` (re-read after
+editing the JSON), and `All` / `None`.
+
+- Rules are only rewritten when the server actually answered; a failed connection leaves the stored rules untouched.
+- Everything checked = no rules for that row, so every published tool stays visible (also the state of a new row).
+
+**For wildcards, write them yourself.** Rules live in the `context-injection` settings namespace under `mcpTools`,
+keyed by the row key (`preset:<preset id>:<serverName>`, the same key the description map uses):
+
+| Form | Meaning |
+|---|---|
+| `create_workitem`, `get_workitem` | **Allow list**: one entry without `!` means only matching tools stay visible |
+| `!delete_*` | **Deny list**: when every entry starts with `!`, matching tools are hidden and the rest stay |
+| `*`, `?` | Wildcards: `*` matches any run of characters, `?` matches exactly one |
+
+What the dialog saves is exactly that deny list, so unchecking `delete_workitem` writes:
+
+```yaml
+context-injection:
+  mcpTools:
+    "preset:standard-yunxiao:alibaba-devops-mcp":
+      - "!delete_workitem"
+```
+
+What to expect:
+
+- **Rules are read at load time.** A committed change applies to the **next `mcp_load`**; an already-loaded server keeps
+  the tools it was admitted with, and `mcp_unload` followed by `mcp_load` picks up the new rules.
+- **A filtered row always takes the proxy carrier** (`mcp_load` lists, `mcp_call` invokes), even under the `dynamic`
+  mode: native registration publishes every discovered tool and offers no way to hold some back.
+- **`eager` ignores filters**, because that mode mounts the whole server through the harness's mcp-client. The plugin
+  warns at startup when rules are configured for it.
+- **A malformed rule set hides nothing**: an unparsable value filters nothing, so a typo never empties a server.
 
 ## Install
 

@@ -18,12 +18,15 @@ import {
   writePresetComposition,
 } from './mcp-authoring.ts'
 import { assertServerName, mcpEntryConfig, specFromEntryConfig, type McpEntryConfig } from './mcp-config.ts'
+import { connectLazy } from './lazy-mcp.ts'
 import type {
   AddMcpRequest,
   DescribeMcpRequest,
   DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
+  ListMcpToolsRequest,
+  ListMcpToolsResult,
   McpGateStateRequest,
   McpGateStateResult,
   McpMutationResult,
@@ -31,6 +34,30 @@ import type {
   McpTarget,
 } from './types.ts'
 import type { McpPreloadGate } from './mcp-gate.ts'
+
+/** How long one editor tool listing may take before the dialog reports failure. */
+const TOOL_LIST_TIMEOUT_MS = 30_000
+
+/**
+ * Resolve `work`, or reject once it outlives `ms`.
+ * @param work - the operation to bound.
+ * @param ms - budget in milliseconds.
+ * @returns the operation's value when it settles inside the budget.
+ * @throws when the budget expires before the operation settles.
+ */
+async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => { reject(new Error(`no answer within ${ms} ms`)) }, ms)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
 
 /** Minimal optional surface read from the agent-preset service. */
 interface AgentPresetResolver {
@@ -168,6 +195,48 @@ export class ClaudeCompatMcp extends TypertRemoteService {
       serverName,
       spec: specFromEntryConfig(row.config as McpEntryConfig),
       disabled: row.disabled === true,
+    }
+  }
+
+  /**
+   * Connect once with a connection spec and report the tools it publishes, so
+   * the editor can offer an enable/disable list. The connection is closed before
+   * this resolves; nothing is registered and no row is touched.
+   * @param request - transport spec (the editor's current form value) and the
+   *   namespace used in diagnostics.
+   * @returns the server's own tool names and descriptions, in its own order.
+   * @throws a typed MCP error when the spec is malformed or the server does not
+   *   answer a listing inside the budget.
+   */
+  @Remote('listMcpTools')
+  async listMcpTools(request: ListMcpToolsRequest): Promise<ListMcpToolsResult> {
+    let config: McpEntryConfig
+    try {
+      config = mcpEntryConfig(request.spec, assertServerName(request.serverName))
+    } catch (cause) {
+      const reason = String(cause)
+      throw new RemoteError('mcp/invalid', reason, { reason }, { cause })
+    }
+    let connection: Awaited<ReturnType<typeof connectLazy>>
+    try {
+      connection = await withTimeout(connectLazy(config), TOOL_LIST_TIMEOUT_MS)
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : String(cause)
+      throw new RemoteError(
+        'mcp/unavailable',
+        `MCP server "${request.serverName}" did not answer a tool listing`,
+        { reason },
+        { cause },
+      )
+    }
+    try {
+      return {
+        tools: connection.tools.map(tool => ({ name: tool.name, description: tool.description ?? '' })),
+      }
+    } finally {
+      // The listing owns this connection for its whole lifetime; a close
+      // failure must not replace the tools it already read.
+      await connection.client.close().catch(() => {})
     }
   }
 

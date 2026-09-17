@@ -15,6 +15,7 @@ import { Button, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AddMcpRequest, EditMcpRequest } from '../types.ts'
+import { toolRuleEntries } from '../mcp-tool-filter.ts'
 import { McpEditor, type McpEditorMode, type McpEditorRequest } from './McpEditor.tsx'
 import {
   MCP_LOADING_OPTIONS,
@@ -212,8 +213,8 @@ function McpRow({ server, description, suppressed, pending, onEditDescription, o
 /** The settings section body. */
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
   const {
-    useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription,
-    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, suppressedMcps, mcps, presets,
+    useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, updateMcpTools,
+    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, listMcpTools, suppressedMcps, mcps, presets,
   } = props
   const state = useContextInjection(snapshot => snapshot)
   const [activeTab, setActiveTab] = useState<TabId>('prompt')
@@ -471,11 +472,14 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
             busy={editorBusy}
             error={editorError}
             describeMcp={describeMcp}
+            listMcpTools={listMcpTools}
             presets={presets}
             descriptionInitial={editor.server === undefined
               ? ''
               : (editor.server.description ?? state.mcpDescriptions[mcpDescriptionKey(editor.server)] ?? '')}
             onUpdateDescription={updateMcpDescription}
+            toolRulesInitial={editor.server === undefined ? [] : toolRuleEntries(state.mcpTools[mcpDescriptionKey(editor.server)])}
+            onUpdateTools={updateMcpTools}
             t={t}
             onClose={closeEditor}
             onSubmit={(request) => { void submitEditor(request) }}

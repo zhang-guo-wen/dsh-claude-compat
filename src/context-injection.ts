@@ -43,6 +43,13 @@ export interface ContextInjectionFlags {
    */
   mcpDescriptions: Record<string, string>
   /**
+   * Per-row MCP tool filters, keyed as `mcpRowKey` (`<scope>:<serverName>`).
+   * Each entry keeps matching tools and `!`-prefixed entries hide them; `*` and
+   * `?` are wildcards. Applied when a session loads the server, so a hidden
+   * tool is neither advertised nor callable.
+   */
+  mcpTools: Record<string, unknown>
+  /**
    * How MCP servers load: `eager` (every enabled row mounts at preset mount),
    * `dynamic` (on-demand tools mount a server into the calling session) or
    * `lazy` (on-demand tools talk to the server without registering anything).
@@ -56,6 +63,10 @@ export const CONTEXT_INJECTION_SCHEMA: Schema<ContextInjectionFlags> = z.object(
   codex: z.boolean().default(true),
   systemPrompt: z.string().default(''),
   mcpDescriptions: z.dict(String).default({}),
+  // Values stay unvalidated by the schema on purpose: the settings document is
+  // hand-editable, and a malformed entry must fail that one row's filter at
+  // read time instead of rejecting the whole namespace's stored section.
+  mcpTools: z.dict(z.any()).default({}),
   mcpLoading: z.string().default('dynamic'),
 })
 
@@ -118,6 +129,7 @@ export function registerContextInjection(
     codex: config.codex ?? true,
     systemPrompt: '',
     mcpDescriptions: {},
+    mcpTools: {},
     mcpLoading: config.mcpLoading ?? 'dynamic',
   }
   let source: InjectionFlagsSource = () => ({ ...base })

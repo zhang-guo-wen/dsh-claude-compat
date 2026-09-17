@@ -20,6 +20,8 @@ import type {
   DescribeMcpResult,
   DisableMcpRequest,
   EditMcpRequest,
+  ListMcpToolsRequest,
+  ListMcpToolsResult,
   McpMutationResult,
 } from '../types.ts'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
@@ -76,6 +78,11 @@ export interface ContextInjectionFlags {
   codex: boolean
   systemPrompt: string
   mcpDescriptions: Record<string, string>
+  /**
+   * Per-row MCP tool rules keyed by {@link mcpDescriptionKey}. Values stay
+   * unvalidated Host-side, so each row's value is narrowed at read time.
+   */
+  mcpTools: Record<string, unknown>
   /** `eager`, `dynamic` or `lazy`; see {@link McpLoadingOption}. */
   mcpLoading: string
 }
@@ -107,6 +114,8 @@ export interface McpAuthoringActions {
   disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
   /** Read one MCP row's current connection spec for the editor to prefill. */
   describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
+  /** Connect once with a spec and report the tools it publishes. */
+  listMcpTools: (request: ListMcpToolsRequest) => Promise<ListMcpToolsResult>
 }
 
 /** Snapshot the section renders. */
@@ -120,6 +129,8 @@ export interface ContextInjectionSectionState {
   systemPrompt: string
   /** Plugin-owned MCP row descriptions keyed by {@link mcpDescriptionKey}. */
   mcpDescriptions: Record<string, string>
+  /** Plugin-owned MCP tool rules keyed the same way; see {@link ContextInjectionFlags.mcpTools}. */
+  mcpTools: Record<string, unknown>
   /** How MCP servers reach the model; one of {@link MCP_LOADING_OPTIONS}. */
   mcpLoading: string
 }
@@ -136,6 +147,11 @@ export interface ContextInjectionSectionFace {
   updateSystemPrompt: (value: string) => void
   /** Persist one MCP row's description. */
   updateMcpDescription: (key: string, description: string) => void
+  /**
+   * Persist one MCP row's tool rules. An empty list removes the row's rules, so
+   * every tool it publishes becomes visible again.
+   */
+  updateMcpTools: (key: string, patterns: readonly string[]) => void
   /** Persist the MCP loading mode the user picked. */
   setMcpLoading: (mode: McpLoadingOption) => Promise<void>
   /** Add one MCP row through the Claude-compatible Host Remote. */
@@ -146,6 +162,8 @@ export interface ContextInjectionSectionFace {
   disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
   /** Read one MCP row's connection spec through the Claude-compatible Host Remote. */
   describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
+  /** List the tools a connection spec publishes through the Claude-compatible Host Remote. */
+  listMcpTools: (request: ListMcpToolsRequest) => Promise<ListMcpToolsResult>
   /**
    * Keys of the allowed rows the Host holds unmounted because the loading mode
    * does not preload. The list uses them to tell "disabled by the user" apart
@@ -230,11 +248,13 @@ export class ContextInjectionController {
       toggle: (name) => { this.toggle(name) },
       updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
       updateMcpDescription: (key, description) => { this.updateMcpDescription(key, description) },
+      updateMcpTools: (key, patterns) => { this.updateMcpTools(key, patterns) },
       setMcpLoading: (mode) => this.setMcpLoading(mode),
       addMcp: this.authoring.addMcp,
       editMcp: this.authoring.editMcp,
       disableMcp: this.authoring.disableMcp,
       describeMcp: this.authoring.describeMcp,
+      listMcpTools: this.authoring.listMcpTools,
       suppressedMcps: this.suppressed,
       mcps: this.mcps,
       presets: this.presets,
@@ -265,6 +285,15 @@ export class ContextInjectionController {
     void this.scope.set('mcpDescriptions', next)
   }
 
+  private updateMcpTools(key: string, patterns: readonly string[]): void {
+    const snapshot = this.scope.getSnapshot()
+    if (snapshot.status !== 'ready' || !snapshot.writable) return
+    const next = { ...snapshot.value?.mcpTools }
+    if (patterns.length === 0) Reflect.deleteProperty(next, key)
+    else next[key] = [...patterns]
+    void this.scope.set('mcpTools', next)
+  }
+
   private setMcpLoading(mode: McpLoadingOption): Promise<void> {
     const snapshot = this.scope.getSnapshot()
     if (snapshot.status !== 'ready' || !snapshot.writable) return Promise.resolve()
@@ -281,6 +310,7 @@ export class ContextInjectionController {
       codex: snapshot.value?.codex ?? true,
       systemPrompt: snapshot.value?.systemPrompt ?? '',
       mcpDescriptions: snapshot.value?.mcpDescriptions ?? {},
+      mcpTools: snapshot.value?.mcpTools ?? {},
       mcpLoading: snapshot.value?.mcpLoading ?? 'dynamic',
     }
   }

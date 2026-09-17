@@ -91,11 +91,20 @@ await mount?.tree.refresh?.()
 - `lazy`:允许的行**默认不挂载**;**用 MCP SDK 直连、完全不注册工具**;`mcp_load` 把工具 schema 作为结果
   返回,模型用固定的 `mcp_call` 代理调用 → **工具列表永不变,请求缓存前缀零失效**。
 
-`mcp_list` / `mcp_load` / `mcp_unload`(lazy 另加 `mcp_call`)让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token:
+`mcp_list` / `mcp_load` / `mcp_unload` / `mcp_call` 让一个会话**按需启动**某台 MCP,省掉工具 schema 的 token
+(`mcp_call` 在 `dynamic` 与 `lazy` 下都注册,见"工具过滤";`eager` 下一个按需工具都不注册):
 
 - 被**禁用**的 composition 行完全不参与:工具不进目录,也不能 `mcp_load`。
 - `mcp_load` 走 **agent 作用域**:`exec.agent.ctx.plugin(mcpClientPlugin, config)`,实例随该会话销毁,
   注册的工具只进这个 agent 的层(所以一个会话加载的服务器不会漏到别的会话)。
+- **连接按会话隔离,也按会话回收。** `mounted` 是 `Map<agentId, Map<serverName, MountedServer>>`:同一会话重复
+  `mcp_load` 复用一份,不同会话各起一份(stdio 就是各一个子进程),子 agent / fork 出的会话都算独立 agent。
+  `eager` 相反 —— preset 是 standing mount,全局共享一个实例。**native 载体**(dynamic 的原生注册)挂在 agent
+  ctx 上,会话销毁时 Cordis 连它一起回收;但 **proxy 载体**是一个裸 SDK client,不绑定任何作用域,会话结束不会
+  自动关 —— 所以 `bindAgentScope` 在某个会话第一次 load 时用 `agent.ctx.effect` 注册一次清理
+  (`Agent.ctx` 的契约是 agent-local contributions "unwind on disposal"),会话销毁时 `releaseAgent` 收掉该
+  会话的全部 mount。注意 `releaseAgent` **只 dispose proxy 载体**:native 的 handle 属于同一个正在销毁的 ctx,
+  在那里再调一次它的 disposer 是多余的。
 - 工具定义用 `@deepseek-ai/dsh-tools` 的 `defineTool` + `ctx.tools.register(def)`;`register` 返回 disposer,
   注册必须包在 `ctx.effect` 里。`exec.agent` 是拿到当前 agent 的唯一途径(无 agent 时要拒绝执行)。
 - mcp-client 的插件对象**经 loader 内部解析**取得(`ctx.loader.internal.import`),与组合用的是同一个模块实例,
@@ -127,6 +136,53 @@ standing 作用域里 `ctx.tools.register`),结果 **preset 每 ~5 秒被重挂�
 
 同名坑:**`@Remote` 方法的形参名必须是 `request`**。网关按方法签名推导描述符,写成 `_request` 会让调用方收到
 `args fields do not match the descriptor: unexpected "request"`,而客户端如果吞掉这个错误,表现就是"开关没反应"。
+
+### 工具过滤(src/mcp-tool-filter.ts)
+
+一台服务器几十个工具、常用只有几个时,`mcp_load` 一次就把全部 schema 倒进会话历史。过滤规则存在
+`context-injection` 设置的 `mcpTools` 字段里,键是 `mcpRowKey(target, serverName)`
+(`preset:<id>:<name>` / `global:<name>`,与 `mcpDescriptions` 同键),值是一个字符串数组:
+
+- 不带 `!` 的条目 = 保留(allow);只要有一个 allow 条目,这台服务器就是**白名单**;
+- `!` 开头的条目 = 隐藏(deny);只有 deny 条目时是**黑名单**;
+- `*` / `?` 通配,其余正则元字符都转义,大小写敏感。
+
+三条实现约束:
+
+1. **schema 用 `z.dict(z.any())`,不要在设置 schema 里校验规则。** 设置在 `~/.dsh/settings.yaml` 里是用户手写的,
+   schema 拒绝一个字段会让**整个 `context-injection` 命名空间**回退到上一次好的值(warn 后静默失效),
+   所以畸形值必须在读取时收敛:`parseMcpToolFilter` 跳过无法解析的条目,空规则不过滤任何东西。
+2. **过滤点有两处,不能只做一处。** `mcp_load` 的返回(模型看不到被隐藏的工具名)和 `mcp_call` 的入参校验
+   (拿旧名字调用会被拒绝)。只做前者挡不住模型凭历史记忆直呼工具名。
+3. **配了规则的行强制走代理通道**(`mode === 'lazy' || filterHidesAnything(filter)`)。`dynamic` 的原生注册由
+   harness 的 `mcp-client` 全量挂载,`ctx.tools.register` 返回的 disposer 只在该包内部,插件拿不到单个工具的撤销权;
+   `eager` 同理,所以 `eager` 下规则不生效 —— `index.ts` 的 `warnFiltersWithoutEffect` 会在启动和每次提交时警告。
+   因为这条,**`mcp_call` 在动态/惰性两种模式下都注册**(以前只注册 lazy)。
+
+规则 reader 是**活闭包**而不是快照:`registerMcpTools(..., key => readToolFilter(key))`,`index.ts` 在
+`registerContextInjection` 返回后把它指向 `flags().mcpTools`。所以改规则不需要重建注册,下一次 `mcp_load` 就读到新值;
+已经加载的服务器保持加载时那套工具(不追溯)。
+
+`mcp_load` 的结果多了 `hidden` 字段(被隐藏的数量),render 里带一行提示 —— 模型需要知道"还有工具但不可调用",
+否则会照历史里的名字硬调。
+
+### 工具选择 UI(src/client/McpEditor.tsx)
+
+编辑弹窗底部的"工具"区块是规则的可视化入口:勾选 = 可见,取消勾选 = 隐藏,默认全勾。
+
+- **数据来自 `claudeCompatMcp.listMcpTools`**(`mcp-remote.ts`),它按**表单当前的 spec** 连一次服务器并
+  `listTools`,返回 `{name, description}[]`,完成后 close。之所以传 spec 而不是 `entryId`:新增行还没有 entryId,
+  而且用户在弹窗里改了 command/url 后点"加载工具列表"应该按新配置拉。连接有 30 秒超时(`withTimeout`)。
+- **默认全勾 = 没有规则。** 勾选状态由 `admits(parseMcpToolFilter(toolRulesInitial), name)` 算出,所以手写的
+  allow/通配规则在 UI 里也显示正确;保存时展开成 `!<name>` 的 deny 列表,全勾则写空数组 → 删掉该键。
+- **连不上就不动规则。** `tools === null` 时保存只提交连接配置 —— 否则一次连接抖动会清掉用户已有的过滤。
+- **每次打开弹窗会真起一个 MCP 连接**(stdio 是新的子进程,`npx -y` 那种 1-3 秒)。edit 模式自动拉,add 模式靠按钮,
+  因为新增时表单里的 spec 常常还是空的。
+- 新 Remote 方法要三处齐:**`@Remote('listMcpTools')` 方法(形参必须叫 `request`)+ `src/remote.ts` 的
+  `TYPERT_REMOTE.descriptors` 加一行 + `ClaudeCompatMcpNamespace` 接口**。漏掉 descriptor 的表现是客户端调用
+  404/"not mounted"。
+- **改 client 后必须重建 `lib/client.js` 并在浏览器强刷**(`HANDOFF_ID` 没 bump,浏览器会继续跑旧 bundle)。
+  改了 CSS module 要核对类名两边都在:JSX 引用了 CSS 里没有的类只得到 `undefined`,静默无样式。
 
 ## MCP JSON 兼容
 

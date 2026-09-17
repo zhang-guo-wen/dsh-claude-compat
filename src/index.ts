@@ -22,10 +22,17 @@ import { claudeRulesListener, type RulesConfig } from './rules.ts'
 import {
   registerContextInjection,
   type ContextInjectionConfig,
+  type ContextInjectionFlags,
 } from './context-injection.ts'
 import { apply as commandBtwApply } from './command-btw.ts'
 import { ClaudeCompatMcp } from './mcp-remote.ts'
 import { parseMcpLoadingMode, registerMcpTools, type McpLoadingMode } from './lazy-mcp.ts'
+import {
+  filterHidesAnything,
+  NO_TOOL_FILTER,
+  parseMcpToolFilter,
+  type McpToolFilter,
+} from './mcp-tool-filter.ts'
 import { createMcpPreloadGate, MCP_ROW_EVENTS, resolvePresetMounts, type GateMount } from './mcp-gate.ts'
 import { livePresetMounts } from '@deepseek-ai/dsh-agent-presets'
 import type { Fiber } from '@deepseek-ai/cordis'
@@ -35,6 +42,8 @@ export { ClaudeCompatMcp } from './mcp-remote.ts'
 export { assertServerName, mcpEntryConfig, specFromEntryConfig } from './mcp-config.ts'
 export { MCP_LOADING_MODES, parseMcpLoadingMode, registerMcpTools } from './lazy-mcp.ts'
 export type { McpLoadingMode } from './lazy-mcp.ts'
+export { admits, filterHidesAnything, filterMcpTools, parseMcpToolFilter, toolRuleEntries } from './mcp-tool-filter.ts'
+export type { McpToolFilter, McpToolSelection } from './mcp-tool-filter.ts'
 export { mcpRowKey } from './mcp-gate.ts'
 export type { McpPreloadGate, McpRowGateState } from './mcp-gate.ts'
 export { instructionsSource, isInstructionsSource, PLUGIN_ID } from './sources.ts'
@@ -97,7 +106,11 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     within => livePresetMounts(within as Fiber | undefined) as readonly GateMount[],
   )
   const gate = createMcpPreloadGate(ctx, () => mcpLoading, mountReader, (message) => { ctx.logger.warn(message) })
-  let disposeMcpTools = registerMcpTools(ctx, mcpLoading, gate)
+  // The tool registration holds this closure rather than a snapshot, so a
+  // committed rule change applies to the next `mcp_load` without re-registering
+  // anything. Loaded servers keep the tools they were admitted with.
+  let readToolFilter: (key: string) => McpToolFilter = () => NO_TOOL_FILTER
+  let disposeMcpTools = registerMcpTools(ctx, mcpLoading, gate, key => readToolFilter(key))
   ctx.effect(() => () => { disposeMcpTools(); gate.dispose() }, 'claude-compat: mcp tools')
   const resync = (): void => { void gate.reconcile() }
   // A preset mounts its rows when a session first selects it and re-mounts them
@@ -118,14 +131,35 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     }), `claude-compat: mcp gate follows ${event}`)
   }
   await gate.reconcile()
+  /**
+   * Warn once per commit when rules cannot take effect. `eager` mounts every
+   * allowed row through mcp-client, whose registration publishes all discovered
+   * tools, so a filter configured for that mode is silently useless otherwise.
+   */
+  const warnFiltersWithoutEffect = (next: ContextInjectionFlags): void => {
+    if (mcpLoading !== 'eager') return
+    const configured = Object.entries(next.mcpTools)
+      .filter(([, value]) => filterHidesAnything(parseMcpToolFilter(value)))
+      .map(([key]) => key)
+    if (configured.length === 0) return
+    ctx.logger.warn(
+      `claude-compat: MCP loading is "eager", so the tool filters for ${configured.join(', ')} have no effect. `
+      + 'eager mounts every enabled row through mcp-client, which registers all discovered tools; '
+      + 'select the "dynamic" or "lazy" loading mode to apply these filters.',
+    )
+  }
   const flags = registerContextInjection(ctx, config, (next) => {
     const mode = parseMcpLoadingMode(next.mcpLoading)
-    if (mode === mcpLoading) return
-    mcpLoading = mode
-    disposeMcpTools()
-    disposeMcpTools = registerMcpTools(ctx, mode, gate)
-    resync()
+    if (mode !== mcpLoading) {
+      mcpLoading = mode
+      disposeMcpTools()
+      disposeMcpTools = registerMcpTools(ctx, mode, gate, key => readToolFilter(key))
+      resync()
+    }
+    warnFiltersWithoutEffect(next)
   })
+  readToolFilter = key => parseMcpToolFilter(flags().mcpTools[key])
+  warnFiltersWithoutEffect(flags())
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().claude }))
   claudeInstructionListener(ctx, config, () => flags().claude)
   const ruleConfig = {
