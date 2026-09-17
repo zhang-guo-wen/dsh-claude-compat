@@ -1,7 +1,7 @@
 /**
  * Context-injection user settings: the two master toggles that decide whether
  * the compatibility loaders fold external agent rule files into the first
- * request.
+ * request, plus the user-authored system prompt.
  *
  * One namespace (`context-injection`) owns both switches so the settings
  * surface can present them as one "Context injection" section: `claude` gates
@@ -14,11 +14,15 @@
  * overridden them. The settings service is optional: without one mounted, the
  * reader stays pinned to the composition `base`.
  *
+ * MCP server management is a separate plugin with its own `mcp-manager`
+ * namespace (`@zhang-guo-wen/dsh-mcp-manager`); this namespace carries no MCP
+ * field.
+ *
  * This file deliberately accesses `ctx.settings` through a small local
  * interface rather than a hard dependency on the settings package, so this
  * package stays composable in trees that do not mount the settings provider.
  *
- * @module @deepseek-ai/dsh-claude-compat/context-injection
+ * @module @zhang-guo-wen/dsh-claude-compat/context-injection
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -28,7 +32,7 @@ import type Schema from '@deepseek-ai/schemastery'
 /** Settings namespace shared by the Claude and Codex loaders. */
 export const CONTEXT_INJECTION_NAMESPACE = 'context-injection'
 
-/** The two master toggles surfaced to the settings UI. */
+/** The settings this plugin surfaces to the settings UI. */
 export interface ContextInjectionFlags {
   /** Whether Claude Code rule files are folded into the first request. */
   claude: boolean
@@ -36,25 +40,6 @@ export interface ContextInjectionFlags {
   codex: boolean
   /** User-authored system prompt embedded at the system level of a session. */
   systemPrompt: string
-  /**
-   * Authoring descriptions for MCP rows, keyed by `<scope>:<serverName>`
-   * (`global:engram` or `preset:standard:mcp-github`). Plugin-owned display
-   * metadata; never reaches the model or the config file.
-   */
-  mcpDescriptions: Record<string, string>
-  /**
-   * Per-row MCP tool filters, keyed as `mcpRowKey` (`<scope>:<serverName>`).
-   * Each entry keeps matching tools and `!`-prefixed entries hide them; `*` and
-   * `?` are wildcards. Applied when a session loads the server, so a hidden
-   * tool is neither advertised nor callable.
-   */
-  mcpTools: Record<string, unknown>
-  /**
-   * How MCP servers load: `eager` (every enabled row mounts at preset mount),
-   * `dynamic` (on-demand tools mount a server into the calling session) or
-   * `lazy` (on-demand tools talk to the server without registering anything).
-   */
-  mcpLoading: string
 }
 
 /** Schema served to settings clients for the injection preference. */
@@ -62,12 +47,6 @@ export const CONTEXT_INJECTION_SCHEMA: Schema<ContextInjectionFlags> = z.object(
   claude: z.boolean().default(true),
   codex: z.boolean().default(true),
   systemPrompt: z.string().default(''),
-  mcpDescriptions: z.dict(String).default({}),
-  // Values stay unvalidated by the schema on purpose: the settings document is
-  // hand-editable, and a malformed entry must fail that one row's filter at
-  // read time instead of rejecting the whole namespace's stored section.
-  mcpTools: z.dict(z.any()).default({}),
-  mcpLoading: z.string().default('dynamic'),
 })
 
 /** Composition-layer defaults for the two toggles when a plugin uses them. */
@@ -76,8 +55,6 @@ export interface ContextInjectionConfig {
   claude?: boolean
   /** Initial Codex state inherited when the user document does not override it. */
   codex?: boolean
-  /** Initial MCP loading mode inherited when the user document does not override it. */
-  mcpLoading?: string
 }
 
 /** A live {@link ContextInjectionFlags} reader (detached snapshots). */
@@ -122,15 +99,11 @@ interface SettingsProviderLike {
 export function registerContextInjection(
   ctx: Context,
   config: ContextInjectionConfig = {},
-  onCommitted?: (flags: ContextInjectionFlags) => void,
 ): InjectionFlagsSource {
   const base: ContextInjectionFlags = {
     claude: config.claude ?? true,
     codex: config.codex ?? true,
     systemPrompt: '',
-    mcpDescriptions: {},
-    mcpTools: {},
-    mcpLoading: config.mcpLoading ?? 'dynamic',
   }
   let source: InjectionFlagsSource = () => ({ ...base })
   ctx.inject(['settings'], (settingsCtx) => {
@@ -144,7 +117,6 @@ export function registerContextInjection(
       source = () => ({ ...scope.get() })
       scope.watch((next) => {
         source = () => ({ ...next })
-        onCommitted?.({ ...next })
       })
     } catch {
       // Another owner already registered this namespace; keep our base.

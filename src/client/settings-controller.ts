@@ -1,121 +1,26 @@
 /**
  * Controller bridging the Host `context-injection` settings namespace onto the
- * Harness-compat section snapshot. Reads the current flags and the user system
- * prompt, writes one field per toggle or the system prompt through the settings
- * scope, and supplies the MCP server roster the MCP tab renders.
+ * Harness-compat section snapshot. Reads the two rule-injection toggles and the
+ * user system prompt, and writes one field at a time through the settings
+ * scope.
  *
- * The MCP roster comes from the already-wired `remote.pluginInventory` read of
- * the Loader (loaded from the deployment and preset config files), so it is
- * real-time and reflects both the global plane and every agent-preset
- * composition. Every mcp-client occurrence is surfaced without deduplication,
- * tagged with where it is configured (`global` or a preset id). Descriptions are
- * plugin-owned: stored in the `context-injection` namespace's `mcpDescriptions`
- * map and merged onto the rows by the component.
- * @module @deepseek-ai/dsh-client-ui-context-injection/settings-controller
+ * MCP server management is a separate plugin
+ * (`@zhang-guo-wen/dsh-mcp-manager`) with its own section and namespace; this
+ * controller carries no MCP state.
+ * @module @zhang-guo-wen/dsh-claude-compat/client/settings-controller
  */
 
-import type {
-  AddMcpRequest,
-  DescribeMcpRequest,
-  DescribeMcpResult,
-  DisableMcpRequest,
-  EditMcpRequest,
-  ListMcpToolsRequest,
-  ListMcpToolsResult,
-  McpMutationResult,
-} from '../types.ts'
-import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** Settings namespace registered Host-side by @deepseek-ai/dsh-claude-compat. */
+/** Settings namespace registered Host-side by @zhang-guo-wen/dsh-claude-compat. */
 export const CONTEXT_INJECTION_NS = 'context-injection'
 
-/** Module specifier of the MCP client bridge whose instances this section lists. */
-export const MCP_CLIENT_MODULE = '@deepseek-ai/dsh-mcp-client'
-
-/** Lifecycle phase of one mcp-client Loader entry (same vocabulary as the inventory). */
-export type McpPhase = PluginInventorySnapshot['entries'][number]['fiberPhase']
-
-/** Stable key for a plugin-owned MCP description (`<scope>:<name>` or `preset:<id>:<name>`). */
-export function mcpDescriptionKey(server: McpServer): string {
-  return server.scope === 'preset' ? `preset:${server.presetId ?? ''}:${server.serverName}` : `${server.scope}:${server.serverName}`
-}
-
-/**
- * The local Loader row id from a loader-qualified id. A global mcp-client row
- * is addressed as `<includePath>:<id>`, and the host writes `serverName` into
- * the row's config; in the default add flow the local id equals that name.
- * @param qualified - loader-qualified entry id.
- * @returns the id segment after the last `:` separator.
- */
-function localEntryId(qualified: string): string {
-  const separator = qualified.lastIndexOf(':')
-  return separator < 0 ? qualified : qualified.slice(separator + 1)
-}
-
-/** One loaded MCP server, as the MCP management tab presents it. */
-export interface McpServer {
-  /** Loader entry id, or null when a preset row declares no id. */
-  entryId: string | null
-  /** MCP namespace shown in tool names. */
-  serverName: string
-  /** Authoring description; plugin-owned, resolved by the section from `mcpDescriptions`. */
-  description?: string
-  /** Where this occurrence is configured. */
-  scope: 'global' | 'preset'
-  /** Preset id when `scope` is `preset`. */
-  presetId: string | undefined
-  /** Effective enablement; `'conditional'` marks a `!!js` gate only a mount can resolve. */
-  enabled: boolean | 'conditional'
-  /** Root-fiber phase when live, otherwise null. */
-  fiberPhase: McpPhase
-}
-
-/** The two master toggles, the user system prompt, the MCP description map, and the MCP loading mode. */
+/** The two master toggles and the user system prompt. */
 export interface ContextInjectionFlags {
   claude: boolean
   codex: boolean
   systemPrompt: string
-  mcpDescriptions: Record<string, string>
-  /**
-   * Per-row MCP tool rules keyed by {@link mcpDescriptionKey}. Values stay
-   * unvalidated Host-side, so each row's value is narrowed at read time.
-   */
-  mcpTools: Record<string, unknown>
-  /** `eager`, `dynamic` or `lazy`; see {@link McpLoadingOption}. */
-  mcpLoading: string
-}
-
-/**
- * One MCP loading mode the section offers. The Host narrows an unknown stored
- * value back to `dynamic`, so the editor only ever shows these three.
- */
-export type McpLoadingOption = 'eager' | 'dynamic' | 'lazy'
-
-/** The MCP loading modes in display order. */
-export const MCP_LOADING_OPTIONS: readonly McpLoadingOption[] = ['eager', 'dynamic', 'lazy']
-
-/** One agent preset the MCP editor can target. */
-export interface McpPresetOption {
-  /** Preset id used in the composition target. */
-  readonly id: string
-  /** Display name the preset published, or the id. */
-  readonly name: string
-}
-
-/** Host-authoring callbacks projected into the MCP management section. */
-export interface McpAuthoringActions {
-  /** Add one MCP row and resolve after the Host commits it. */
-  addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
-  /** Replace one MCP row and resolve after the Host commits it. */
-  editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
-  /** Set one MCP row's disabled flag and resolve after the Host commits it. */
-  disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
-  /** Read one MCP row's current connection spec for the editor to prefill. */
-  describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
-  /** Connect once with a spec and report the tools it publishes. */
-  listMcpTools: (request: ListMcpToolsRequest) => Promise<ListMcpToolsResult>
 }
 
 /** Snapshot the section renders. */
@@ -127,12 +32,6 @@ export interface ContextInjectionSectionState {
   claude: boolean
   codex: boolean
   systemPrompt: string
-  /** Plugin-owned MCP row descriptions keyed by {@link mcpDescriptionKey}. */
-  mcpDescriptions: Record<string, string>
-  /** Plugin-owned MCP tool rules keyed the same way; see {@link ContextInjectionFlags.mcpTools}. */
-  mcpTools: Record<string, unknown>
-  /** How MCP servers reach the model; one of {@link MCP_LOADING_OPTIONS}. */
-  mcpLoading: string
 }
 
 /** Registration-side face for the section. */
@@ -145,72 +44,6 @@ export interface ContextInjectionSectionFace {
   toggle: (name: 'claude' | 'codex') => void
   /** Persist the system prompt text the user committed. */
   updateSystemPrompt: (value: string) => void
-  /** Persist one MCP row's description. */
-  updateMcpDescription: (key: string, description: string) => void
-  /**
-   * Persist one MCP row's tool rules. An empty list removes the row's rules, so
-   * every tool it publishes becomes visible again.
-   */
-  updateMcpTools: (key: string, patterns: readonly string[]) => void
-  /** Persist the MCP loading mode the user picked. */
-  setMcpLoading: (mode: McpLoadingOption) => Promise<void>
-  /** Add one MCP row through the Claude-compatible Host Remote. */
-  addMcp: (request: AddMcpRequest) => Promise<McpMutationResult>
-  /** Edit one MCP row through the Claude-compatible Host Remote. */
-  editMcp: (request: EditMcpRequest) => Promise<McpMutationResult>
-  /** Enable or disable one MCP row through the Claude-compatible Host Remote. */
-  disableMcp: (request: DisableMcpRequest) => Promise<McpMutationResult>
-  /** Read one MCP row's connection spec through the Claude-compatible Host Remote. */
-  describeMcp: (request: DescribeMcpRequest) => Promise<DescribeMcpResult>
-  /** List the tools a connection spec publishes through the Claude-compatible Host Remote. */
-  listMcpTools: (request: ListMcpToolsRequest) => Promise<ListMcpToolsResult>
-  /**
-   * Keys of the allowed rows the Host holds unmounted because the loading mode
-   * does not preload. The list uses them to tell "disabled by the user" apart
-   * from "enabled, but deliberately not in this request".
-   */
-  suppressedMcps: () => Promise<readonly string[]>
-  /** Resolve the current loaded MCP roster from the Host plugin inventory. */
-  mcps: () => Promise<readonly McpServer[]>
-  /** Resolve the agent presets the editor can target. */
-  presets: () => Promise<readonly McpPresetOption[]>
-}
-
-/**
- * Project a Host plugin-inventory snapshot onto the MCP roster, keeping every
- * mcp-client occurrence (global plane plus each preset composition) without
- * deduplicating cross-scope repeats. Descriptions are not read here — they are
- * plugin-owned and merged by the section from the `mcpDescriptions` map.
- * @param snapshot - the load-time inventory read from the Host.
- * @returns one row per mcp-client occurrence, tagged with its config scope.
- */
-export function mapMcpServers(snapshot: PluginInventorySnapshot): readonly McpServer[] {
-  const rows: McpServer[] = []
-  for (const entry of snapshot.entries) {
-    if (entry.moduleName !== MCP_CLIENT_MODULE) continue
-    rows.push({
-      entryId: entry.entryId,
-      serverName: localEntryId(entry.entryId),
-      scope: 'global',
-      presetId: undefined,
-      enabled: entry.enabled,
-      fiberPhase: entry.fiberPhase,
-    })
-  }
-  for (const preset of snapshot.agentPresets ?? []) {
-    for (const row of preset.rows) {
-      if (row.moduleName !== MCP_CLIENT_MODULE) continue
-      rows.push({
-        entryId: row.entryId,
-        serverName: localEntryId(row.entryId ?? row.moduleName),
-        scope: 'preset',
-        presetId: preset.id,
-        enabled: row.enabled,
-        fiberPhase: row.fiberPhase,
-      })
-    }
-  }
-  return rows
 }
 
 /** Owner handle over the `context-injection` namespace. */
@@ -220,18 +53,8 @@ export class ContextInjectionController {
 
   /**
    * @param scope - bound `context-injection` settings scope.
-   * @param mcps - Host-backed MCP roster loader.
-   * @param authoring - Host-backed MCP mutation callbacks.
-   * @param presets - Host-backed agent-preset options loader.
-   * @param suppressed - Host-backed reader of the rows the gate holds unmounted.
    */
-  constructor(
-    private readonly scope: SettingsScope<ContextInjectionFlags>,
-    private readonly mcps: () => Promise<readonly McpServer[]>,
-    private readonly authoring: McpAuthoringActions,
-    private readonly presets: () => Promise<readonly McpPresetOption[]>,
-    private readonly suppressed: () => Promise<readonly string[]>,
-  ) {
+  constructor(private readonly scope: SettingsScope<ContextInjectionFlags>) {
     this.store = createSnapshotStore(this.projection())
     this.unsubscribe = scope.subscribe(() => this.publish())
   }
@@ -247,17 +70,6 @@ export class ContextInjectionController {
       hooks: { contextInjection: this.store },
       toggle: (name) => { this.toggle(name) },
       updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
-      updateMcpDescription: (key, description) => { this.updateMcpDescription(key, description) },
-      updateMcpTools: (key, patterns) => { this.updateMcpTools(key, patterns) },
-      setMcpLoading: (mode) => this.setMcpLoading(mode),
-      addMcp: this.authoring.addMcp,
-      editMcp: this.authoring.editMcp,
-      disableMcp: this.authoring.disableMcp,
-      describeMcp: this.authoring.describeMcp,
-      listMcpTools: this.authoring.listMcpTools,
-      suppressedMcps: this.suppressed,
-      mcps: this.mcps,
-      presets: this.presets,
     }
   }
 
@@ -275,32 +87,6 @@ export class ContextInjectionController {
     void this.scope.set('systemPrompt', value)
   }
 
-  private updateMcpDescription(key: string, description: string): void {
-    const snapshot = this.scope.getSnapshot()
-    if (snapshot.status !== 'ready' || !snapshot.writable) return
-    const map = snapshot.value?.mcpDescriptions ?? {}
-    const next = { ...map }
-    if (description === '') Reflect.deleteProperty(next, key)
-    else next[key] = description
-    void this.scope.set('mcpDescriptions', next)
-  }
-
-  private updateMcpTools(key: string, patterns: readonly string[]): void {
-    const snapshot = this.scope.getSnapshot()
-    if (snapshot.status !== 'ready' || !snapshot.writable) return
-    const next = { ...snapshot.value?.mcpTools }
-    if (patterns.length === 0) Reflect.deleteProperty(next, key)
-    else next[key] = [...patterns]
-    void this.scope.set('mcpTools', next)
-  }
-
-  private setMcpLoading(mode: McpLoadingOption): Promise<void> {
-    const snapshot = this.scope.getSnapshot()
-    if (snapshot.status !== 'ready' || !snapshot.writable) return Promise.resolve()
-    if (snapshot.value?.mcpLoading === mode) return Promise.resolve()
-    return this.scope.set('mcpLoading', mode)
-  }
-
   private projection(): ContextInjectionSectionState {
     const snapshot = this.scope.getSnapshot()
     return {
@@ -309,9 +95,6 @@ export class ContextInjectionController {
       claude: snapshot.value?.claude ?? true,
       codex: snapshot.value?.codex ?? true,
       systemPrompt: snapshot.value?.systemPrompt ?? '',
-      mcpDescriptions: snapshot.value?.mcpDescriptions ?? {},
-      mcpTools: snapshot.value?.mcpTools ?? {},
-      mcpLoading: snapshot.value?.mcpLoading ?? 'dynamic',
     }
   }
 
@@ -319,6 +102,3 @@ export class ContextInjectionController {
     this.store.set(this.projection())
   }
 }
-
-
-

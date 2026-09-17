@@ -1,30 +1,23 @@
 /**
- * Context-injection settings section: the Harness-compat page with two tabs.
+ * Context-injection settings section: the Harness-compat page for prompt
+ * management.
  *
- * Tab "提示词管理" describes the default skill and CLAUDE.md / AGENTS.md loading
- * rules, edits a system-level prompt persisted to the `context-injection`
- * namespace (which the Host injects as a real system-prompt section), and holds
- * the two Claude/Codex rule-injection master toggles. Tab "MCP 管理" lists the
- * MCP servers the Host has configured — global plane plus every agent-preset
- * composition, surfaced without deduplication and tagged with its config scope.
- * @module @deepseek-ai/dsh-client-ui-context-injection/ContextInjectionSection
+ * It describes the default skill and CLAUDE.md / AGENTS.md loading rules, edits
+ * a system-level prompt persisted to the `context-injection` namespace (which
+ * the Host injects as a real system-prompt section), and holds the two
+ * Claude/Codex rule-injection master toggles.
+ *
+ * MCP server management is the separate `settings.mcpManager` section owned by
+ * the `@zhang-guo-wen/dsh-mcp-manager` plugin, which also owns the loading mode
+ * and the per-row tool filters.
+ *
+ * @module @zhang-guo-wen/dsh-claude-compat/client/ContextInjectionSection
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
-import { Button, StateDot, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useState, type ReactNode } from 'react'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { AddMcpRequest, EditMcpRequest } from '../types.ts'
-import { toolRuleEntries } from '../mcp-tool-filter.ts'
-import { McpEditor, type McpEditorMode, type McpEditorRequest } from './McpEditor.tsx'
-import {
-  MCP_LOADING_OPTIONS,
-  mcpDescriptionKey,
-  type ContextInjectionSectionFace,
-  type McpLoadingOption,
-  type McpPhase,
-  type McpServer,
-} from './settings-controller.ts'
+import type { ContextInjectionSectionFace } from './settings-controller.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
 import css from './ContextInjectionSection.module.css'
 
@@ -34,316 +27,17 @@ export type ContextInjectionSectionProps =
   & PropsLocale<'settings.contextInjection'>
   & InjectFace<ContextInjectionSectionFace>
 
-/** Localized `t` bound to this section's dictionary namespace. */
-type Translate = ContextInjectionSectionProps['t']
-
-/** One tab id inside the section. */
-type TabId = 'prompt' | 'mcp'
-
-/** MCP load view state. */
-type McpView =
-  | { readonly status: 'loading' }
-  | { readonly status: 'error' }
-  | {
-    readonly status: 'ready'
-    readonly servers: readonly McpServer[]
-    /** Row keys the gate holds unmounted, so an enabled row reads as deferred. */
-    readonly suppressed: ReadonlySet<string>
-  }
-
-/** Non-empty fiber-phase → localized status key. */
-const PHASE_LABEL = {
-  pending: 'mcp.status.pending',
-  loading: 'mcp.status.loading',
-  active: 'mcp.status.active',
-  failed: 'mcp.status.failed',
-  unloading: 'mcp.status.unloading',
-} as const satisfies Record<NonNullable<McpPhase>, ContextInjectionSectionKey>
-
-/** Non-empty fiber-phase → state-dot semantic. */
-const PHASE_DOT = {
-  pending: 'idle',
-  loading: 'ongoing',
-  active: 'done',
-  failed: 'error',
-  unloading: 'ongoing',
-} as const satisfies Record<NonNullable<McpPhase>, StateDotState>
-
-/** MCP loading mode → localized option name. */
-const MODE_LABEL = {
-  eager: 'mcp.mode.eager',
-  dynamic: 'mcp.mode.dynamic',
-  lazy: 'mcp.mode.lazy',
-} as const satisfies Record<McpLoadingOption, ContextInjectionSectionKey>
-
-/** MCP loading mode → localized one-line explanation. */
-const MODE_DESC = {
-  eager: 'mcp.mode.eager.desc',
-  dynamic: 'mcp.mode.dynamic.desc',
-  lazy: 'mcp.mode.lazy.desc',
-} as const satisfies Record<McpLoadingOption, ContextInjectionSectionKey>
-
-/** Resolve one MCP row's displayed status label and dot. */
-function statusOf(server: McpServer, suppressed: boolean, t: Translate): { label: string; dot: StateDotState } {
-  // A row the gate holds unmounted is still one the user enabled: the loading
-  // mode, not the user, keeps it out of the request.
-  if (server.enabled === false) {
-    return suppressed
-      ? { label: t('mcp.status.deferred'), dot: 'idle' }
-      : { label: t('mcp.status.disabled'), dot: 'idle' }
-  }
-  if (server.enabled === 'conditional') return { label: t('mcp.status.conditional'), dot: 'warning' }
-  if (server.fiberPhase === null) return { label: t('mcp.status.configured'), dot: 'idle' }
-  return { label: t(PHASE_LABEL[server.fiberPhase]), dot: PHASE_DOT[server.fiberPhase] }
-}
-
-/**
- * The MCP loading mode picker: one radio per mode, each carrying its own
- * one-line explanation so the trade-off (prompt cost and cache-prefix churn
- * against tool-binding quality) is readable without leaving the page.
- */
-function McpLoadingPicker({ value, disabled, onPick, t }: {
-  readonly value: string
-  readonly disabled: boolean
-  readonly onPick: (mode: McpLoadingOption) => void
-  readonly t: Translate
-}): ReactNode {
-  return (
-    <div className={css.modeBlock}>
-      <span className={css.fieldLabel}>{t('mcp.mode.title')}</span>
-      <span className={css.fieldHint}>{t('mcp.mode.hint')}</span>
-      <div className={css.modeGroup} role="radiogroup" aria-label={t('mcp.mode.title')}>
-        {MCP_LOADING_OPTIONS.map((mode) => {
-          const selected = value === mode
-          return (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              data-mcp-mode={mode}
-              className={selected ? `${css.modeOption} ${css.modeOptionActive}` : css.modeOption}
-              disabled={disabled}
-              title={disabled ? t('unavailable') : undefined}
-              onClick={() => { onPick(mode) }}
-            >
-              <span className={css.modeName}>{t(MODE_LABEL[mode])}</span>
-              <span className={css.modeDesc}>{t(MODE_DESC[mode])}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/** One rendered MCP server row: name, plugin-owned description, scope, status, and row actions. */
-function McpRow({ server, description, suppressed, pending, onEditDescription, onEdit, onToggleDisabled, actionsDisabled, t }: {
-  readonly server: McpServer
-  readonly description: string
-  /** The gate holds this allowed row unmounted because the mode does not preload. */
-  readonly suppressed: boolean
-  readonly pending: 'enabling' | 'disabling' | null
-  readonly onEditDescription: (value: string) => void
-  readonly onEdit: () => void
-  readonly onToggleDisabled: (enabled: boolean) => void
-  readonly actionsDisabled: boolean
-  readonly t: Translate
-}): ReactNode {
-  const scope = server.scope === 'global'
-    ? t('mcp.scopeGlobal')
-    : `${t('mcp.scopePreset')} · ${server.presetId ?? ''}`
-  // A pending toggle shows the intended target and a transient label, so the
-  // row reacts the instant it is clicked instead of waiting on the child MCP
-  // process to start (or stop).
-  const status = pending === 'enabling'
-    ? { label: t('mcp.status.starting'), dot: 'warning' as StateDotState }
-    : pending === 'disabling'
-      ? { label: t('mcp.status.stopping'), dot: 'warning' as StateDotState }
-      : statusOf(server, suppressed, t)
-  const checked = pending === 'enabling'
-    ? true
-    : pending === 'disabling' ? false : server.enabled !== false || suppressed
-  const disabledNow = server.enabled === false && !suppressed
-  const [draft, setDraft] = useState<string | null>(null)
-  const value = draft ?? description
-  return (
-    <div className={css.mcpRow} data-mcp-scope={server.scope} data-mcp-name={server.serverName}>
-      <div className={css.mcpMain}>
-        <span className={css.mcpName}>{server.serverName}</span>
-        <input
-          className={css.mcpDesc}
-          value={value}
-          placeholder={t('mcp.descriptionPlaceholder')}
-          aria-label={t('mcp.descriptionLabel')}
-          onChange={(event) => { setDraft(event.currentTarget.value) }}
-          onBlur={() => { onEditDescription(value); setDraft(null) }}
-        />
-      </div>
-      <div className={css.mcpRight}>
-        <span className={css.badge}>{scope}</span>
-        <span className={css.status}>
-          <StateDot state={status.dot} />
-          {status.label}
-        </span>
-        <span className={css.mcpActions}>
-          <button
-            type="button"
-            className={css.mcpAction}
-            disabled={actionsDisabled}
-            onClick={onEdit}
-          >
-            {t('mcp.edit')}
-          </button>
-          {server.entryId !== null ? (
-            <Switch
-              checked={checked}
-              onChange={onToggleDisabled}
-              label={disabledNow ? t('mcp.enable') : t('mcp.disable')}
-              disabled={actionsDisabled || pending !== null}
-              title={t('mcp.status.disabled')}
-            />
-          ) : null}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 /** The settings section body. */
 export function ContextInjectionSection(props: ContextInjectionSectionProps): ReactNode {
-  const {
-    useContextInjection, t, toggle, updateSystemPrompt, updateMcpDescription, updateMcpTools,
-    setMcpLoading, addMcp, editMcp, disableMcp, describeMcp, listMcpTools, suppressedMcps, mcps, presets,
-  } = props
+  const { useContextInjection, t, toggle, updateSystemPrompt } = props
   const state = useContextInjection(snapshot => snapshot)
-  const [activeTab, setActiveTab] = useState<TabId>('prompt')
   const [promptDraft, setPromptDraft] = useState<string | null>(null)
-  const [mcpView, setMcpView] = useState<McpView>({ status: 'loading' })
-  const [mcpRequest, setMcpRequest] = useState(0)
-  const [editor, setEditor] = useState<{ mode: McpEditorMode; server: McpServer | undefined; open: boolean }>({
-    mode: 'add', server: undefined, open: false,
-  })
-  const [editorBusy, setEditorBusy] = useState(false)
-  const [editorError, setEditorError] = useState<string | null>(null)
-  const [mcpActionError, setMcpActionError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [rowPending, setRowPending] = useState<Record<string, 'enabling' | 'disabling'>>({})
   const disabled = !state.available || !state.writable
   const promptValue = promptDraft ?? state.systemPrompt
-
-  useEffect(() => {
-    let current = true
-    setMcpView({ status: 'loading' })
-    // The gate read is awaited FIRST: it resolves only after the Host has
-    // finished applying the loading mode to the composed rows, so the roster
-    // read behind it describes the settled state instead of a half-unmounted
-    // composition. A gate read that fails must not hide the roster — the rows
-    // then render with their composed state until the next refresh.
-    void Promise.resolve()
-      .then(suppressedMcps)
-      .catch((error: unknown): readonly string[] => {
-        console.error('[claude-compat] MCP gate read failed', error)
-        return []
-      })
-      .then(async (suppressed) => ({ suppressed, servers: await mcps() }))
-      .then(
-        ({ servers, suppressed }) => {
-          if (current) setMcpView({ status: 'ready', servers, suppressed: new Set(suppressed) })
-        },
-        () => { if (current) setMcpView({ status: 'error' }) },
-      )
-    return () => { current = false }
-  }, [mcps, suppressedMcps, mcpRequest])
 
   const commitPrompt = (): void => {
     if (promptDraft === null) return
     updateSystemPrompt(promptDraft)
-  }
-
-  /**
-   * Persisting the mode changes which rows are mounted, so the roster is
-   * re-read once the Host has applied it: the gate read resolves only after
-   * every composed row reached its new state.
-   */
-  const pickMode = (mode: McpLoadingOption): void => {
-    void Promise.resolve()
-      .then(() => setMcpLoading(mode))
-      .then(suppressedMcps)
-      .catch((): readonly string[] => [])
-      .then(() => { refreshMcps() })
-  }
-
-  const openAdd = (): void => {
-    setEditor({ mode: 'add', server: undefined, open: true })
-    setEditorError(null)
-    setMcpActionError(null)
-    setNotice(null)
-  }
-
-  const openEdit = (server: McpServer): void => {
-    setEditor({ mode: 'edit', server, open: true })
-    setEditorError(null)
-    setMcpActionError(null)
-    setNotice(null)
-  }
-
-  const closeEditor = (): void => {
-    if (editorBusy) return
-    setEditor(previous => ({ ...previous, open: false }))
-    setEditorError(null)
-  }
-
-  const refreshMcps = (): void => {
-    setMcpRequest(value => value + 1)
-  }
-
-  const submitEditor = async (request: McpEditorRequest): Promise<void> => {
-    setEditorBusy(true)
-    setEditorError(null)
-    setMcpActionError(null)
-    try {
-      if (editor.mode === 'add') await addMcp(request as AddMcpRequest)
-      else await editMcp(request as EditMcpRequest)
-      setEditor({ mode: editor.mode, server: undefined, open: false })
-      setNotice(editor.mode === 'add' ? t('mcp.notice.added') : t('mcp.notice.saved'))
-      refreshMcps()
-    } catch (cause) {
-      setEditorError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setEditorBusy(false)
-    }
-  }
-
-  /**
-   * Flip one row's enablement without blocking the list. The row immediately
-   * shows its target state and a transient starting/stopping label; the Host
-   * call (which starts or stops the child MCP process) runs in the background
-   * and the list refreshes with the real state when it settles.
-   */
-  const toggleDisabled = (server: McpServer, enabled: boolean): void => {
-    if (server.entryId === null) return
-    const key = mcpDescriptionKey(server)
-    const target = server.scope === 'global'
-      ? { scope: 'global' as const }
-      : { scope: 'preset' as const, agentPreset: server.presetId ?? '' }
-    setMcpActionError(null)
-    setRowPending(previous => ({ ...previous, [key]: enabled ? 'enabling' : 'disabling' }))
-    void (async () => {
-      try {
-        await disableMcp({ target, entryId: server.entryId as string, disabled: !enabled })
-        setNotice(enabled ? t('mcp.notice.enabled') : t('mcp.notice.disabled'))
-      } catch (cause) {
-        setMcpActionError(cause instanceof Error ? cause.message : String(cause))
-      } finally {
-        setRowPending(previous => {
-          const next = { ...previous }
-          delete next[key]
-          return next
-        })
-        refreshMcps()
-      }
-    })()
   }
 
   const switchRow = (
@@ -369,124 +63,27 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
 
   return (
     <div className={css.section}>
-      <div className={css.tabs} role="tablist" aria-label={t('nav')}>
-        <button
-          type="button"
-          role="tab"
-          className={css.tab}
-          aria-selected={activeTab === 'prompt'}
-          aria-controls="context-injection-prompt"
-          onClick={() => { setActiveTab('prompt') }}
-        >
-          {t('tab.prompt')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={css.tab}
-          aria-selected={activeTab === 'mcp'}
-          aria-controls="context-injection-mcp"
-          onClick={() => { setActiveTab('mcp') }}
-        >
-          {t('tab.mcp')}
-        </button>
-      </div>
-
-      {activeTab === 'prompt' ? (
-        <div className={css.panel} id="context-injection-prompt" role="tabpanel">
-          <p className={css.intro}>{t('prompt.intro')}</p>
-          <div className={css.field}>
-            <span className={css.fieldLabel}>{t('systemPrompt.label')}</span>
-            <span className={css.fieldHint}>{t('systemPrompt.hint')}</span>
-            <textarea
-              className={css.promptArea}
-              value={promptValue}
-              placeholder={t('systemPrompt.placeholder')}
-              disabled={disabled}
-              onChange={(event) => { setPromptDraft(event.currentTarget.value) }}
-              onBlur={commitPrompt}
-            />
-          </div>
-          {!state.available ? <p className={css.unavailable}>{t('unavailable')}</p> : null}
-          <span className={css.switchSectionLabel}>{t('switchSection')}</span>
-          <div>
-            {switchRow('claude', 'claude.desc', 'claude.files')}
-            {switchRow('codex', 'codex.desc', 'codex.files')}
-          </div>
-        </div>
-      ) : (
-        <div className={css.panel} id="context-injection-mcp" role="tabpanel">
-          {!state.available ? <p className={css.unavailable}>{t('unavailable')}</p> : null}
-          <McpLoadingPicker
-            value={state.mcpLoading}
+      <div className={css.panel}>
+        <p className={css.intro}>{t('prompt.intro')}</p>
+        <div className={css.field}>
+          <span className={css.fieldLabel}>{t('systemPrompt.label')}</span>
+          <span className={css.fieldHint}>{t('systemPrompt.hint')}</span>
+          <textarea
+            className={css.promptArea}
+            value={promptValue}
+            placeholder={t('systemPrompt.placeholder')}
             disabled={disabled}
-            onPick={pickMode}
-            t={t}
-          />
-          <div className={css.mcpToolbar}>
-            <p className={css.mcpSub}>{t('mcp.subtitle')}</p>
-            <Button variant="outline" size="sm" onClick={openAdd} disabled={editorBusy}>
-              {t('mcp.add')}
-            </Button>
-          </div>
-          {mcpView.status === 'loading' ? <p className={css.mcpStatus}>{t('mcp.loading')}</p> : null}
-          {mcpView.status === 'error' ? (
-            <div className={css.mcpFailure}>
-              <p role="alert">{t('mcp.error')}</p>
-              <button type="button" className={css.mcpRetry} onClick={() => { setMcpRequest(value => value + 1) }}>
-                {t('mcp.retry')}
-              </button>
-            </div>
-          ) : null}
-          {mcpView.status === 'ready' && mcpView.servers.length === 0 ? (
-            <p className={css.empty}>{t('mcp.empty')}</p>
-          ) : null}
-          {mcpView.status === 'ready' && mcpView.servers.length > 0 ? (
-            <div className={css.mcpList}>
-              {mcpView.servers.map((server) => {
-                const key = mcpDescriptionKey(server)
-                return (
-                  <McpRow
-                    key={key}
-                    server={server}
-                    description={server.description ?? state.mcpDescriptions[key] ?? ''}
-                    suppressed={mcpView.suppressed.has(key)}
-                    pending={rowPending[key] ?? null}
-                    onEditDescription={(value) => { updateMcpDescription(key, value) }}
-                    onEdit={() => { openEdit(server) }}
-                    onToggleDisabled={(enabled) => { toggleDisabled(server, enabled) }}
-                    actionsDisabled={editorBusy}
-                    t={t}
-                  />
-                )
-              })}
-            </div>
-          ) : null}
-          {mcpActionError !== null ? <p className={css.mcpActionError} role="alert">{mcpActionError}</p> : null}
-          {notice !== null ? <p className={css.mcpNotice} role="status">{notice}</p> : null}
-          <McpEditor
-            open={editor.open}
-            mode={editor.mode}
-            server={editor.server}
-            disabled={false}
-            busy={editorBusy}
-            error={editorError}
-            describeMcp={describeMcp}
-            listMcpTools={listMcpTools}
-            presets={presets}
-            descriptionInitial={editor.server === undefined
-              ? ''
-              : (editor.server.description ?? state.mcpDescriptions[mcpDescriptionKey(editor.server)] ?? '')}
-            onUpdateDescription={updateMcpDescription}
-            toolRulesInitial={editor.server === undefined ? [] : toolRuleEntries(state.mcpTools[mcpDescriptionKey(editor.server)])}
-            onUpdateTools={updateMcpTools}
-            t={t}
-            onClose={closeEditor}
-            onSubmit={(request) => { void submitEditor(request) }}
+            onChange={(event) => { setPromptDraft(event.currentTarget.value) }}
+            onBlur={commitPrompt}
           />
         </div>
-      )}
+        {!state.available ? <p className={css.unavailable}>{t('unavailable')}</p> : null}
+        <span className={css.switchSectionLabel}>{t('switchSection')}</span>
+        <div>
+          {switchRow('claude', 'claude.desc', 'claude.files')}
+          {switchRow('codex', 'codex.desc', 'codex.files')}
+        </div>
+      </div>
     </div>
   )
 }
-

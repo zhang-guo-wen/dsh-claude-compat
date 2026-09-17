@@ -1,12 +1,17 @@
 /**
  * Context-injection settings section, browser half. Registers the
  * `settings.contextInjection` dictionaries and the one `settings.section` entry
- * that presents the Claude/Codex rule-injection master toggles.
+ * that presents the Claude/Codex rule-injection master toggles, plus the `/btw`
+ * answer card.
+ *
+ * MCP server management is a separate plugin
+ * (`@zhang-guo-wen/dsh-mcp-manager`) with its own `settings.mcpManager` section
+ * and Host Remote; this half mounts neither.
  *
  * The section reads and writes the `context-injection` namespace the Host
- * `@deepseek-ai/dsh-claude-compat` plugin owns, so toggles and the injection
+ * `@zhang-guo-wen/dsh-claude-compat` plugin owns, so toggles and the injection
  * behavior share one setting.
- * @module @deepseek-ai/dsh-client-ui-context-injection
+ * @module @zhang-guo-wen/dsh-claude-compat/client
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -19,14 +24,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: declares the overlay slot this plugin's card registers into.
 import type {} from './slot-declarations.ts'
-// Type-only: the Remote namespaces this plugin reads (ctx.remote.pluginInventory).
-// The namespace map entry itself is declared by the Host package's generated
-// remote-client augmentation, which only applies once that module is in the
-// program; `dsh-api-remotes/client` alone leaves `ctx.remote.pluginInventory` as
-// `any`.
-import type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { ContextInjectionSection } from './ContextInjectionSection.tsx'
 import { BtwCard, type BtwCardInjected } from './BtwCard.tsx'
 import { BtwCardRegistry, sessionStreamFactory } from './btw-card-controller.ts'
@@ -35,28 +33,11 @@ import { en, NS, zh, type ContextInjectionSectionKey } from './locales.ts'
 import {
   CONTEXT_INJECTION_NS,
   ContextInjectionController,
-  mapMcpServers,
   type ContextInjectionFlags,
-  type McpAuthoringActions,
-  type McpPresetOption,
-  type McpServer,
 } from './settings-controller.ts'
-import { TYPERT_REMOTE, REMOTE_NAMESPACE } from '../remote.ts'
-import type {
-  AddMcpRequest,
-  DescribeMcpRequest,
-  DescribeMcpResult,
-  DisableMcpRequest,
-  EditMcpRequest,
-  ListMcpToolsRequest,
-  ListMcpToolsResult,
-  McpGateStateRequest,
-  McpGateStateResult,
-  McpMutationResult,
-} from '../types.ts'
 
 export type { ContextInjectionSectionProps } from './ContextInjectionSection.tsx'
-export type { ContextInjectionSectionFace, ContextInjectionSectionState, McpServer } from './settings-controller.ts'
+export type { ContextInjectionSectionFace, ContextInjectionSectionState } from './settings-controller.ts'
 export { NS } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -70,74 +51,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Required services (cordis fiber inject). */
 export const inject = [
-  'slots', 'locale', 'settingsScope', 'remote', 'remote.pluginInventory',
-  'remote.session', 'workspaces',
+  'slots', 'locale', 'settingsScope', 'remote', 'remote.session', 'workspaces',
 ]
 
-/** The namespace service this plugin mounts itself — fetched via `ctx.get`, never injected. */
-interface ClaudeCompatMcpNamespace {
-  addMcp(request: AddMcpRequest): Promise<RemoteResult<McpMutationResult>>
-  editMcp(request: EditMcpRequest): Promise<RemoteResult<McpMutationResult>>
-  disableMcp(request: DisableMcpRequest): Promise<RemoteResult<McpMutationResult>>
-  describeMcp(request: DescribeMcpRequest): Promise<RemoteResult<DescribeMcpResult>>
-  listMcpTools(request: ListMcpToolsRequest): Promise<RemoteResult<ListMcpToolsResult>>
-  gateState(request: McpGateStateRequest): Promise<RemoteResult<McpGateStateResult>>
-}
-
-/** Unwrap a Typert `RemoteResult` or surface the Host failure. */
-async function unwrapRemote<T>(call: () => Promise<RemoteResult<T>>): Promise<T> {
-  const result = await call()
-  if (!result.ok) throw new Error(result.error.message)
-  return result.value
-}
-
 /**
- * Register the dictionaries and the context-injection settings section.
+ * Register the dictionaries, the context-injection settings section, and the
+ * `/btw` answer card.
  * @param ctx - client root context.
  */
 export async function apply(ctx: Context): Promise<void> {
-  const disposeMount = await ctx.remote.$mount(TYPERT_REMOTE)
-  ctx.effect(() => () => disposeMount(), 'claude-compat: remote mount')
-
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-context-injection: dictionaries')
   const t = ctx.locale.bind(NS)
-  const mcps = async (): Promise<readonly McpServer[]> => {
-    const result = await ctx.remote.pluginInventory.list()
-    if (!result.ok) {
-      throw new Error(`pluginInventory.list failed: ${result.error.code}: ${result.error.message}`)
-    }
-    return mapMcpServers(result.value)
-  }
-  const mcpMgr = (): ClaudeCompatMcpNamespace => {
-    const namespace = ctx.get(`remote.${REMOTE_NAMESPACE}`) as ClaudeCompatMcpNamespace | undefined
-    if (namespace === undefined) {
-      throw new Error(`${REMOTE_NAMESPACE} namespace service is not mounted`)
-    }
-    return namespace
-  }
-  const authoring: McpAuthoringActions = {
-    addMcp: request => unwrapRemote(() => mcpMgr().addMcp(request)),
-    editMcp: request => unwrapRemote(() => mcpMgr().editMcp(request)),
-    disableMcp: request => unwrapRemote(() => mcpMgr().disableMcp(request)),
-    describeMcp: request => unwrapRemote(() => mcpMgr().describeMcp(request)),
-    listMcpTools: request => unwrapRemote(() => mcpMgr().listMcpTools(request)),
-  }
-  const presets = async (): Promise<readonly McpPresetOption[]> => {
-    const result = await ctx.remote.pluginInventory.list()
-    if (!result.ok) {
-      throw new Error(`pluginInventory.list failed: ${result.error.code}: ${result.error.message}`)
-    }
-    return (result.value.agentPresets ?? []).map(group => ({ id: group.id, name: group.name ?? group.id }))
-  }
-  const suppressedMcps = async (): Promise<readonly string[]> =>
-    unwrapRemote(() => mcpMgr().gateState({}))
-      .then(state => state.suppressed)
   const controller = new ContextInjectionController(
     ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
-    mcps,
-    authoring,
-    presets,
-    suppressedMcps,
   )
   ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: scope')
 
@@ -179,7 +105,3 @@ export async function apply(ctx: Context): Promise<void> {
     }),
   }, BtwCard))
 }
-
-
-
-
