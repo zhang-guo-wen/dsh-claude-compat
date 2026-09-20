@@ -1,33 +1,48 @@
 # Development verification for this plugin
 
-This repository is a standalone package, so its specs are not part of the
-Harness monorepo test gate. Two suites run inside this repository with Node's
-own type stripping and need no test runner:
+This repository is a standalone package: its specs are not part of the Harness
+monorepo test gate, and it installs neither the Harness runtime packages the
+composition specs mount nor React. The Harness checkout beside it owns the
+`vitest` binary, so both commands below run **from that checkout**.
+
+## Full suite (recommended)
 
 ```sh
-node --test tests/*.spec.ts   # not wired yet; see below
+node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.config.ts
 ```
 
-Until that exists, run the Harness-side checks:
+`vitest.harness.config.ts` resolves `@deepseek-ai/*` through the checkout's
+`tsconfig.base.json` paths and React through the checkout's pnpm store, so every
+spec runs — including the real Loader and real agent-loop composition specs and
+the settings-section render spec. Six suites, 74 tests.
 
-1. **Card registry, receipt text, and journal follower** — plain specs at
-   `tests/btw-card.spec.ts` and `tests/btw-stream.spec.ts`. They import only
-   relative sources, so any runner that resolves `@deepseek-ai/dsh-*` from this
-   repository's `node_modules` executes them:
+`rules-composition.spec.ts` carries the takeover acceptance case: it mounts this
+plugin and `@deepseek-ai/dsh-agent-instructions` in the deployed registration
+order (this plugin first, as a host row registered at boot, against a loader
+that registers from the lazily-mounted agent preset) and asserts the first model
+request carries `CLAUDE.md` exactly once, with its `@import` expanded, while the
+loader's own `AGENTS.md` section survives.
 
-   ```sh
-   # from the Harness checkout, whose vitest resolves those packages
-   node_modules/.bin/vitest run --config vitest.plugin-compat.config.ts
-   ```
+## Self-contained subset
 
-2. **Card rendering** — the component is mounted under the Harness renderer's
-   binding (`useSyncExternalStore` over the real `dsh-client-store`) by
-   `tests/btw-card-render.tmp.spec.tsx`. It only runs from the Harness checkout,
-   whose `vitest.plugin-compat.config.ts` supplies React and `@deepseek-ai/dsh-*`
-   resolution, because this repository has no React installation; delete it once
-   this repository has a runner that can mount React itself.
+```sh
+node_modules/.bin/vitest run --root dsh-claude-compat
+```
 
-`vitest.plugin-compat.config.ts` in the Harness checkout is the temporary config
-those two commands use (`--config` is required; the repo config does not include
-this directory). Both are development scaffolding: fold them into this
-repository when it grows a test runner.
+`vitest.config.ts` resolves `@deepseek-ai/*` from this package's own
+`node_modules` and takes only `*.spec.ts`, which is everything a spec that needs
+no Harness runtime package and no React requires:
+
+- `tests/memory.spec.ts` — memory-file discovery, `@path` imports, auto memory,
+  nested memory, the `CLAUDE.md` takeover, and the listener.
+- `tests/claude-compat.spec.ts` — `SKILL.md` parsing, the skill provider, memory
+  loading, and the plugin registration.
+
+The rest need the full run: `rules.spec.ts`, `rules-composition.spec.ts`, and
+`loader-composition.spec.ts` mount `@deepseek-ai/dsh-agent-loop`, `-testkit`,
+`-fs-local`, and `-tool-fs`, which this package does not depend on;
+`context-injection-section.spec.tsx` renders the settings section and so needs
+React.
+
+Both configs are development scaffolding, and they live in this repository now.
+Fold the runner itself in when this package installs a `vitest` of its own.

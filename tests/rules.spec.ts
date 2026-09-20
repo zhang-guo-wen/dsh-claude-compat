@@ -12,9 +12,12 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
-import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+// This suite runs from the Harness checkout (see tests/README.md), whose
+// agent-loop tests own the scripted adapter.
+import { MockAdapter, textResponse, toolCallResponse } from '../../packages/core/agent-loop/tests/mock-adapter.ts'
 import * as ClaudeCompat from '../src/index.ts'
 import { loadClaudeRules, parsePaths, renderRules, foldRulesContext, injectRulesIntoRequest, type ClaudeRule } from '../src/rules.ts'
+import { isInstructionsSource } from '../src/sources.ts'
 
 async function tempDir(): Promise<string> {
   return await mkdtemp(join(tmpdir(), 'dsh-claude-rules-'))
@@ -119,7 +122,11 @@ describe('renderRules and foldRulesContext', () => {
     expect(folded[0]).toBe(direct)
     const injected = folded[1]!
     expect(injected.content).toEqual([{ type: 'text', text: 'injected rule' }])
-    expect(injected.source.kind).toBe('claude-rule')
+    expect(injected.source).toEqual({
+      kind: 'plugin',
+      plugin: '@zhang-guo-wen/dsh-claude-compat#claude-rule',
+      form: 'instructions',
+    })
   })
 
   it('returns a reject decision unchanged from injectRulesIntoRequest', () => {
@@ -163,7 +170,7 @@ describe('real agent-loop rules injection', () => {
       await ctx.plugin(ToolFs)
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(AgentLoop, { agents: [] })
-      await ctx.plugin(ClaudeCompat, { claudeHome, projectRootMarkers: ['.git'], codex: false })
+      await ctx.plugin(ClaudeCompat, { claudeHome, projectRootMarkers: ['.git'] })
       ctx.llm.registerAdapter(['mock'], adapter)
       const agent = await ctx.agentLoop.create(SessionId('rules'), { provider: 'mock', model: 'mock' }, { cwd: project })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Inspect the users module.' }], source: { kind: 'user' } }))
@@ -185,7 +192,7 @@ describe('real agent-loop rules injection', () => {
       // The always-on rule must be folded exactly once on the session surface.
       const claudeRuleEvents = agent.session.snapshotEvents()
         .filter((event): event is Extract<ReturnType<typeof agent.session.snapshotEvents>[number], { type: 'user/message' }> =>
-          event.type === 'user/message' && event.data.source.kind === 'claude-rule')
+          event.type === 'user/message' && isInstructionsSource(event.data.source, 'claude-rule'))
       const alwaysOn = claudeRuleEvents.filter(event => requestTextFromEvent(event).includes('Alpha always-on rule body.'))
       const scoped = claudeRuleEvents.filter(event => requestTextFromEvent(event).includes('Beta API rule body.'))
       expect(alwaysOn.length).toBe(1)
@@ -225,7 +232,7 @@ describe('real agent-loop rules injection', () => {
       await ctx.plugin(ToolFs)
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(AgentLoop, { agents: [] })
-      await ctx.plugin(ClaudeCompat, { claudeHome, projectRootMarkers: ['.git'], codex: false })
+      await ctx.plugin(ClaudeCompat, { claudeHome, projectRootMarkers: ['.git'] })
       ctx.llm.registerAdapter(['mock'], adapter)
       const agent = await ctx.agentLoop.create(SessionId('rules-cwd'), { provider: 'mock', model: 'mock' }, { cwd })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Inspect the users module.' }], source: { kind: 'user' } }))

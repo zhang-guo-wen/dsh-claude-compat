@@ -18,9 +18,8 @@
  * @module @deepseek-ai/dsh-claude-compat/rules
  */
 
-import { homedir } from 'node:os'
-import { readFile, readdir } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { readdir } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { FileSystem, FsDirEntry } from '@deepseek-ai/dsh-fs'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -29,7 +28,16 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import picomatch from 'picomatch/posix'
+import {
+  DEFAULT_PROJECT_ROOT_MARKERS,
+  findProjectRoot,
+  pathToPosix,
+  readTextFile,
+  readToolFilePath,
+  resolveClaudeHome,
+} from './file-text.ts'
 import { parseYamlFrontmatter } from './frontmatter.ts'
+import { byteLength, renderInstructionBlocks } from './render.ts'
 import { instructionsSource, isInstructionsSource } from './sources.ts'
 
 /** The `read` tool name that drives path-scoped activation. */
@@ -89,8 +97,8 @@ export async function loadClaudeRules(
   ctx: Context,
   config: RulesConfig = {},
 ): Promise<ClaudeRulesResult> {
-  const claudeHome = resolve(config.claudeHome ?? process.env.CLAUDE_HOME ?? join(homedir(), '.claude'))
-  const markers = config.projectRootMarkers ?? ['.git']
+  const claudeHome = resolveClaudeHome(config)
+  const markers = config.projectRootMarkers ?? DEFAULT_PROJECT_ROOT_MARKERS
   const maxSourceBytes = config.maxRuleSourceBytes ?? DEFAULT_RULE_SOURCE_BYTES
   const projectRoot = await findProjectRoot(resolve(cwd), markers, ctx)
   const rules: ClaudeRule[] = []
@@ -151,19 +159,7 @@ export function foldRulesContext(messages: UserMessage[], text: string): UserMes
  * @returns the rendered text.
  */
 export function renderRules(rules: readonly ClaudeRule[], maxBytes: number): string {
-  const parts: string[] = []
-  let bytes = 0
-  for (const rule of rules) {
-    const part = `Instructions from: ${rule.displayPath}\n\n${rule.content}`
-    const separator = parts.length === 0 ? '' : '\n\n'
-    const partBytes = byteLength(separator + part)
-    // The first rule is always included (its source cap bounds it); later rules
-    // are added only while the aggregate budget allows.
-    if (parts.length > 0 && maxBytes > 0 && Number.isFinite(maxBytes) && bytes + partBytes > maxBytes) break
-    parts.push(part)
-    bytes += partBytes
-  }
-  return parts.join('\n\n')
+  return renderInstructionBlocks(rules, maxBytes)
 }
 
 /**
@@ -214,7 +210,7 @@ export function claudeRulesListener(
       if (session !== undefined) {
         const state = ensureState(session, states)
         if (state.loaded !== undefined) {
-          const filePath = readFilePath(exec)
+          const filePath = readToolFilePath(exec)
           const cwd = exec.agent.session.header.cwd
           if (filePath !== undefined && cwd !== undefined) activateMatchingRules(state, filePath, cwd)
         }
@@ -294,20 +290,13 @@ function activateMatchingRules(state: RuleSessionState, filePath: string, cwd: s
   }
 }
 
-function readFilePath(exec: ToolExecution): string | undefined {
-  if (typeof exec.arguments !== 'object' || exec.arguments === null) return undefined
-  if (!('file_path' in exec.arguments) || typeof exec.arguments.file_path !== 'string') return undefined
-  const path = exec.arguments.file_path.trim()
-  return path.length > 0 ? path : undefined
-}
-
 async function readRuleFile(
   path: string,
   displayPath: string,
   maxSourceBytes: number,
   ctx: Context,
 ): Promise<ClaudeRule | undefined> {
-  const raw = await readRuleText(path, ctx)
+  const raw = await readTextFile(path, ctx)
   if (raw === undefined) return undefined
   if (byteLength(raw) > maxSourceBytes) return undefined
   const parsed = parseYamlFrontmatter(raw)
@@ -328,27 +317,6 @@ export function parsePaths(value: unknown): string[] | undefined {
     return globs.length > 0 ? globs : undefined
   }
   return undefined
-}
-
-async function readRuleText(path: string, ctx: Context): Promise<string | undefined> {
-  const fs = ctx.get('fs')
-  if (fs !== undefined) return await readRuleTextFromFs(path, fs)
-  try {
-    return await readFile(path, { encoding: 'utf8' })
-  } catch {
-    return undefined
-  }
-}
-
-async function readRuleTextFromFs(path: string, fs: FileSystem): Promise<string | undefined> {
-  try {
-    const target = await fs.resolve(path)
-    const info = await fs.stat(target)
-    if (info === undefined || info.type !== 'file') return undefined
-    return await fs.readText(target)
-  } catch {
-    return undefined
-  }
 }
 
 async function walkRuleTree(root: string, ctx: Context): Promise<string[]> {
@@ -404,41 +372,3 @@ async function walkDirFromNode(dir: string, found: string[]): Promise<void> {
   }
 }
 
-/** Walk upward to the first directory containing a configured root marker. */
-async function findProjectRoot(cwd: string, markers: string[], ctx: Context): Promise<string> {
-  const fs = ctx.get('fs')
-  let current = resolve(cwd)
-  for (;;) {
-    for (const marker of markers) {
-      if (await pathExists(join(current, marker), fs)) return current
-    }
-    const parent = dirname(current)
-    if (parent === current) return resolve(cwd)
-    current = parent
-  }
-}
-
-async function pathExists(path: string, fs: FileSystem | undefined): Promise<boolean> {
-  if (fs !== undefined) {
-    try {
-      const target = await fs.resolve(path)
-      return await fs.stat(target) !== undefined
-    } catch {
-      return false
-    }
-  }
-  try {
-    await readFile(path, { encoding: 'utf8' })
-    return true
-  } catch {
-    return false
-  }
-}
-
-function pathToPosix(path: string): string {
-  return path.split('\\').join('/')
-}
-
-function byteLength(text: string): number {
-  return Buffer.byteLength(text, 'utf8')
-}

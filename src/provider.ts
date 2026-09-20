@@ -11,7 +11,6 @@
  * @module @deepseek-ai/dsh-claude-compat/provider
  */
 
-import { homedir } from 'node:os'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -25,6 +24,7 @@ import type {
   SkillProviderObservation,
   SkillSource,
 } from '@deepseek-ai/dsh-skill'
+import { DEFAULT_PROJECT_ROOT_MARKERS, findProjectRoot, resolveClaudeHome } from './file-text.ts'
 import { parseClaudeSkill } from './parse.ts'
 
 /** Rank contributed by a project `.claude/skills` root, after project-agent roots. */
@@ -76,8 +76,8 @@ export class ClaudeCodeSkillProvider implements SkillProvider {
     config: Config = {},
   ) {
     this.name = config.providerName ?? 'claude-code'
-    this.claudeHome = resolve(config.claudeHome ?? process.env.CLAUDE_HOME ?? join(homedir(), '.claude'))
-    this.projectRootMarkers = config.projectRootMarkers ?? ['.git']
+    this.claudeHome = resolveClaudeHome(config)
+    this.projectRootMarkers = config.projectRootMarkers ?? [...DEFAULT_PROJECT_ROOT_MARKERS]
     this.includeProjectRoot = config.includeProjectRoot ?? true
     this.includeGlobalRoot = config.includeGlobalRoot ?? true
     this.enabled = config.enabled ?? (() => true)
@@ -234,33 +234,3 @@ async function listSkillRootEntriesFromNode(root: string): Promise<SkillRootEntr
   return result
 }
 
-/** Walk upward to the first directory containing a configured root marker. */
-async function findProjectRoot(cwd: string, markers: string[], ctx: Context): Promise<string> {
-  const fs = ctx.get('fs')
-  let current = resolve(cwd)
-  for (;;) {
-    for (const marker of markers) {
-      if (await pathExists(join(current, marker), fs)) return current
-    }
-    const parent = dirname(current)
-    if (parent === current) return resolve(cwd)
-    current = parent
-  }
-}
-
-async function pathExists(path: string, fs: FileSystem | undefined): Promise<boolean> {
-  if (fs !== undefined) {
-    try {
-      const target = await fs.resolve(path)
-      return await fs.stat(target) !== undefined
-    } catch {
-      return false
-    }
-  }
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
-}

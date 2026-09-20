@@ -1,22 +1,13 @@
 /**
- * Context-injection user settings: the two master toggles that decide whether
- * the compatibility loaders fold external agent rule files into the first
- * request, plus the user-authored system prompt.
- *
- * One namespace (`context-injection`) owns both switches so the settings
- * surface can present them as one "Context injection" section: `claude` gates
- * the Claude Code rule files (`.claude/CLAUDE.md`, `~/.claude/CLAUDE.md`) and
- * `codex` gates the Codex rule files (`.codex/AGENTS.md`, `~/.codex/AGENTS.md`).
+ * Context-injection user settings: the three switches that decide which part of
+ * the Claude Code compatibility surface this plugin applies — the skill
+ * catalog, the memory files, and the scoped rules.
  *
  * The switches resolve through `ctx.settings` (the settings seam) so they are
  * user-editable in a local document and persist across restarts, falling back
- * to a composition `base` (from the plugin `config`) when the user has not
+ * to composition `base` values (from the plugin `config`) when the user has not
  * overridden them. The settings service is optional: without one mounted, the
  * reader stays pinned to the composition `base`.
- *
- * MCP server management is a separate plugin with its own `mcp-manager`
- * namespace (`@zhang-guo-wen/dsh-mcp-manager`); this namespace carries no MCP
- * field.
  *
  * This file deliberately accesses `ctx.settings` through a small local
  * interface rather than a hard dependency on the settings package, so this
@@ -29,33 +20,31 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 
-/** Settings namespace shared by the Claude and Codex loaders. */
+/** Settings namespace owned by this plugin. */
 export const CONTEXT_INJECTION_NAMESPACE = 'context-injection'
+
+/** One independently switchable part of the compatibility surface. */
+export type InjectionSwitch = 'skills' | 'rules' | 'memory'
 
 /** The settings this plugin surfaces to the settings UI. */
 export interface ContextInjectionFlags {
-  /** Whether Claude Code rule files are folded into the first request. */
-  claude: boolean
-  /** Whether Codex rule files are folded into the first request. */
-  codex: boolean
-  /** User-authored system prompt embedded at the system level of a session. */
-  systemPrompt: string
+  /** Whether `.claude/skills` roots are added to the session skill catalog. */
+  skills: boolean
+  /** Whether `.claude/rules/**` scoped rules are folded into the request. */
+  rules: boolean
+  /** Whether the Claude Code memory files are folded into the request. */
+  memory: boolean
 }
 
-/** Schema served to settings clients for the injection preference. */
+/** Schema served to settings clients for the injection preferences. */
 export const CONTEXT_INJECTION_SCHEMA: Schema<ContextInjectionFlags> = z.object({
-  claude: z.boolean().default(true),
-  codex: z.boolean().default(true),
-  systemPrompt: z.string().default(''),
+  skills: z.boolean().default(true),
+  rules: z.boolean().default(true),
+  memory: z.boolean().default(true),
 })
 
-/** Composition-layer defaults for the two toggles when a plugin uses them. */
-export interface ContextInjectionConfig {
-  /** Initial Claude state inherited when the user document does not override it. */
-  claude?: boolean
-  /** Initial Codex state inherited when the user document does not override it. */
-  codex?: boolean
-}
+/** Composition-layer defaults for the switches when a plugin uses them. */
+export type ContextInjectionConfig = Partial<ContextInjectionFlags>
 
 /** A live {@link ContextInjectionFlags} reader (detached snapshots). */
 export type InjectionFlagsSource = () => ContextInjectionFlags
@@ -93,7 +82,7 @@ interface SettingsProviderLike {
  * keeps that owner's reader — we never throw.
  *
  * @param ctx - plugin context (uses `ctx.get('settings')` when present).
- * @param config - composition defaults for the two toggles.
+ * @param config - composition defaults for the three switches.
  * @returns a thunk returning the current flags.
  */
 export function registerContextInjection(
@@ -101,9 +90,9 @@ export function registerContextInjection(
   config: ContextInjectionConfig = {},
 ): InjectionFlagsSource {
   const base: ContextInjectionFlags = {
-    claude: config.claude ?? true,
-    codex: config.codex ?? true,
-    systemPrompt: '',
+    skills: config.skills ?? true,
+    rules: config.rules ?? true,
+    memory: config.memory ?? true,
   }
   let source: InjectionFlagsSource = () => ({ ...base })
   ctx.inject(['settings'], (settingsCtx) => {

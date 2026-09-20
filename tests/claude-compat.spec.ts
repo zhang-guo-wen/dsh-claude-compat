@@ -10,7 +10,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { parseClaudeSkill } from '../src/parse.ts'
 import { ClaudeCodeSkillProvider } from '../src/provider.ts'
 import { loadClaudeInstructions, foldContext, injectIntoFirstRequest } from '../src/instructions.ts'
-import { apply } from '../src/index.ts'
+import { apply, inject } from '../src/index.ts'
+import { registerContextInjection } from '../src/context-injection.ts'
 
 const SKILL_MD = `---
 name: my-skill
@@ -99,7 +100,7 @@ describe('ClaudeCodeSkillProvider', () => {
 })
 
 describe('loadClaudeInstructions', () => {
-  it('combines global and project CLAUDE.md rules', async () => {
+  it('combines global and project CLAUDE.md rules broadest first', async () => {
     const project = await tempDir()
     const claudeHome = await tempDir()
     try {
@@ -107,11 +108,11 @@ describe('loadClaudeInstructions', () => {
       await writeFile(join(project, '.claude', 'CLAUDE.md'), 'project rule')
       await writeFile(join(claudeHome, 'CLAUDE.md'), 'global rule')
       const ctx = mockCtx()
-      const context = await loadClaudeInstructions(project, ctx, { claudeHome })
+      const context = await loadClaudeInstructions(project, ctx, { claudeHome, includeManagedMemory: false })
       expect(context).toBeDefined()
       expect(context?.text).toContain('project rule')
       expect(context?.text).toContain('global rule')
-      expect(context?.files.map(f => f.displayPath)).toEqual(['.claude/CLAUDE.md', '~/.claude/CLAUDE.md'])
+      expect(context?.files.map(f => f.displayPath)).toEqual(['~/.claude/CLAUDE.md', '.claude/CLAUDE.md'])
     } finally {
       await rm(project, { recursive: true, force: true })
       await rm(claudeHome, { recursive: true, force: true })
@@ -122,7 +123,11 @@ describe('loadClaudeInstructions', () => {
     const project = await tempDir()
     const claudeHome = await tempDir()
     try {
-      const context = await loadClaudeInstructions(project, mockCtx(), { claudeHome })
+      const context = await loadClaudeInstructions(project, mockCtx(), {
+        claudeHome,
+        includeManagedMemory: false,
+        includeAutoMemory: false,
+      })
       expect(context).toBeUndefined()
     } finally {
       await rm(project, { recursive: true, force: true })
@@ -135,7 +140,12 @@ describe('loadClaudeInstructions', () => {
     const claudeHome = await tempDir()
     try {
       await writeFile(join(claudeHome, 'CLAUDE.md'), 'global rule')
-      const context = await loadClaudeInstructions(project, mockCtx(), { claudeHome, includeGlobalRule: false })
+      const context = await loadClaudeInstructions(project, mockCtx(), {
+        claudeHome,
+        includeGlobalRule: false,
+        includeManagedMemory: false,
+        includeAutoMemory: false,
+      })
       expect(context).toBeUndefined()
     } finally {
       await rm(project, { recursive: true, force: true })
@@ -152,62 +162,121 @@ describe('foldContext', () => {
     expect(folded[0]).toBe(direct)
     const injected = folded[1]!
     expect(injected.content).toEqual([{ type: 'text', text: 'injected rule' }])
-    expect(injected.source.kind).toBe('claude-code')
+    expect(injected.source).toEqual({
+      kind: 'plugin',
+      plugin: '@zhang-guo-wen/dsh-claude-compat#claude-code',
+      form: 'instructions',
+    })
+  })
+
+  it('records the loader a nested memory file came from', () => {
+    const direct: UserMessage = createUserMessage({ content: [{ type: 'text', text: 'prompt' }], source: { kind: 'user' } })
+    const folded = foldContext([direct], 'nested memory', 'claude-memory')
+    expect(folded[1]?.source).toEqual({
+      kind: 'plugin',
+      plugin: '@zhang-guo-wen/dsh-claude-compat#claude-memory',
+      form: 'instructions',
+    })
   })
 })
 
 describe('injectIntoFirstRequest', () => {
-  it('returns a reject decision unchanged', () => {
-    const decision: PreStepDecision = { kind: 'reject' }
+  type EnterDecision = Extract<PreStepDecision, { kind: 'enter' }>
+
+  it('does not inject into an empty enter', () => {
+    const decision: EnterDecision = { kind: 'enter', messages: [] }
     expect(injectIntoFirstRequest(decision, { text: 'x', files: [] })).toBe(decision)
   })
 
-  it('does not inject into an empty enter', () => {
-    const decision: PreStepDecision = { kind: 'enter', messages: [] }
-    expect(injectIntoFirstRequest(decision, { text: 'x', files: [] })).toBe(decision)
+  it('injects into an enter carrying a claimed message', () => {
+    const decision: EnterDecision = {
+      kind: 'enter',
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'prompt' }], source: { kind: 'user' } })],
+    }
+    const amended = injectIntoFirstRequest(decision, { text: 'x', files: [] })
+    expect(amended).not.toBe(decision)
+    expect(amended.messages.map(message => message.content[0])).toEqual([
+      { type: 'text', text: 'prompt' },
+      { type: 'text', text: 'x' },
+    ])
   })
 })
 
-describe('user system-prompt section', () => {
-  interface Section {
-    name: string
-    order: number
-    text: string | (() => string)
-  }
-
-  /** A minimal plugin context: optional settings + system-prompt services. */
-  function stubCtx(withSystemPrompt: boolean): { ctx: Context; sections: Section[] } {
-    const sections: Section[] = []
-    const settingsScope = {
-      get: () => ({ claude: true, codex: true, systemPrompt: 'user guidance' }),
+describe('plugin composition', () => {
+  /**
+   * A minimal plugin context. `inject` stands in for the Cordis dependency
+   * gate, handing back a scope carrying the settings service so the namespace
+   * registration runs.
+   */
+  function stubCtx(): { ctx: Context; listeners: string[]; namespaces: string[]; providers: number } {
+    const listeners: string[] = []
+    const namespaces: string[] = []
+    const scope = {
+      get: () => ({ skills: true, rules: true, memory: true }),
       watch: () => () => {},
     }
+    const state = { providers: 0 }
     const ctx = {
-      skills: { registerProvider: () => () => {} },
-      on: () => () => {},
+      skills: { registerProvider: () => { state.providers += 1; return () => {} } },
+      on: (event: string) => { listeners.push(event); return () => {} },
       inject: (_deps: readonly string[], callback: (scope: { settings: unknown }) => void) => {
-        callback({ settings: { register: () => settingsScope } })
+        callback({ settings: { register: (namespace: string) => { namespaces.push(namespace); return scope } } })
       },
-      get: (name: string) => name === 'systemPrompt'
-        ? withSystemPrompt ? { section: (section: Section) => { sections.push(section) } } : undefined
-        : undefined,
+      get: () => undefined,
     } as unknown as Context
-    return { ctx, sections }
+    return {
+      ctx,
+      listeners,
+      namespaces,
+      get providers() { return state.providers },
+    }
   }
 
-  it('registers the user system prompt as a live system-prompt section', () => {
-    const { ctx, sections } = stubCtx(true)
-    apply(ctx, {})
+  it('registers the skill provider, both contributors, and the settings namespace', async () => {
+    const stub = stubCtx()
+    await apply(stub.ctx, {})
 
-    expect(sections).toHaveLength(1)
-    expect(sections[0]?.name).toBe('context-injection:user-system-prompt')
-    expect(typeof sections[0]?.text).toBe('function')
-    expect((sections[0]?.text as () => string)()).toBe('user guidance')
+    expect(stub.providers).toBe(1)
+    // The memory contributor and the scoped-rule contributor each follow the
+    // pre-step waterfall and each watch reads.
+    expect(stub.listeners).toEqual(['agent/pre-step', 'tools/result', 'agent/pre-step', 'tools/result'])
+    expect(stub.namespaces).toEqual(['context-injection'])
   })
 
-  it('skips registration when the system-prompt service is absent', () => {
-    const { ctx } = stubCtx(false)
-    // No throw: the section is simply not registered.
-    apply(ctx, {})
+  it('registers nothing beyond the skills service it declares', () => {
+    // The retired Codex, system-prompt, and `/btw` contributions must not come
+    // back as hidden injections.
+    expect(inject).toEqual(['skills'])
+  })
+})
+
+describe('registerContextInjection', () => {
+  /** A context whose settings service resolves to `section` (or is absent). */
+  function settingsCtx(section?: Record<string, boolean>): Context {
+    return {
+      inject: (_deps: readonly string[], callback: (scope: { settings: unknown }) => void) => {
+        if (section === undefined) return
+        callback({
+          settings: {
+            register: () => ({ get: () => section, watch: () => () => {} }),
+          },
+        })
+      },
+    } as unknown as Context
+  }
+
+  it('defaults all three switches on without a settings service', () => {
+    const flags = registerContextInjection(settingsCtx(), {})
+    expect(flags()).toEqual({ skills: true, rules: true, memory: true })
+  })
+
+  it('takes each switch from the composition when the user document is silent', () => {
+    const flags = registerContextInjection(settingsCtx(), { skills: false, memory: false })
+    expect(flags()).toEqual({ skills: false, rules: true, memory: false })
+  })
+
+  it('lets the user document override the composition per switch', () => {
+    const flags = registerContextInjection(settingsCtx({ skills: true, rules: true, memory: false }), { skills: false })
+    expect(flags()).toEqual({ skills: true, rules: true, memory: false })
   })
 })

@@ -1,7 +1,7 @@
 # AGENTS.md
 
 本仓 `dsh-claude-compat` 是**独立于 harness monorepo** 的 DeepSeek Harness (DSH) 插件：
-提供 Claude Code / Codex 兼容(skills、rules、`/btw`)与「Claude 兼容」设置页。
+提供 Claude Code 兼容(技能发现、记忆文件、作用域规则)与「Claude 兼容」设置页。
 MCP 管理是另一个仓(`@zhang-guo-wen/dsh-mcp-manager`),见下。
 它不打包 `@deepseek-ai/*`,运行时从宿主 harness 解析这些包。
 
@@ -11,11 +11,36 @@ MCP 管理是另一个仓(`@zhang-guo-wen/dsh-mcp-manager`),见下。
 这不是风格选择——`dsh plugin add <git-url>` 取的是仓库根,包放在 `packages/*` 下会被装成错误的东西。
 
 - `src/` —— host 入口 `index.ts`;浏览器半边在 `src/client/`。
+  Claude 记忆文件（位置、`@import` 展开、自动记忆）在 `src/memory.ts`,折叠时机在 `src/instructions.ts`;
+  共享的文件读取与项目根上溯在 `src/file-text.ts`,共用的 `Instructions from:` 渲染在 `src/render.ts`。
+- **`CLAUDE.md` / `CLAUDE.local.md` 由本插件独占。** 这两个名字 harness 的
+  `agent-instructions` 也会读(不展开 `@import`、1 MiB 上限、同目录去重),所以 `src/instructions.ts`
+  在每个 `agent/pre-step` 里把该加载器消息中这两个名字的段落剥掉(`Instructions from:` /
+  `Additional instructions from:` / `Updated instructions from:` / `Instructions removed:` 四种标题)。
+  改 harness 那侧的渲染格式会让剥离静默失效,`tests/rules-composition.spec.ts` 的组合用例就是这条不变量。
+  `takeOverClaudeMd: false` 可整个关掉接管。
 - `lib/` —— 构建产物:**已提交进仓库**(`index.mjs` host + `client.js` 浏览器 handoff),
   这样别人可以直接从 git 安装。改完源码**记得 `npm run build` 并把 `lib/` 一起提交**。
 - `cordis.patch.yml` —— 把插件行插入组合的 bundle 层。
 - `docs/implementation.md` —— 实现说明(设计理念、源码地图、Model Experience)。
   它与根 `README.md`(面向使用者)内容不同,扁平化时从旧的包内 `README.md` 保留下来。
+
+## 验证(specs)
+
+specs 在**姊妹 Harness checkout** 里跑(那个目录才有 `vitest`),从 checkout 根执行:
+
+```sh
+node_modules/.bin/vitest run --root dsh-claude-compat                                   # 自足子集
+node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.config.ts # 全量 6 套
+```
+
+全量配置用 checkout 的 `tsconfig.base.json` paths 解析 `@deepseek-ai/*`、从 checkout 的 pnpm store 解析
+React,所以装载 `dsh-agent-loop` 的真实组合用例与组件渲染用例都能跑;自足子集只用本包 `node_modules`
+里已装的包,且只收 `*.spec.ts`。`tests/README.md` 列出两者各自覆盖的套件。
+
+设置页三个开关(技能 / 记忆 / 规则)各自加载什么、何时注入,由 `src/client/locales.ts` 的词条与
+`ContextInjectionSection.tsx` 的 `COMPAT_SWITCHES` 共同决定;**加了能力就要同步这两处**,
+否则 UI 会继续按老清单描述。
 
 ## 构建
 
@@ -43,11 +68,11 @@ MCP 服务器管理(行的增删改、加载模式、工具过滤、「MCP 管�
 
 两边的关系:
 
-- **设置命名空间分开**:`context-injection`(本仓:`claude` / `codex` / `systemPrompt`)与
+- **设置命名空间分开**:`context-injection`(本仓:`skills` / `memory` / `rules`)与
   `mcp-manager`(那边:`loading` / `descriptions` / `tools`)。settings 服务一个命名空间只有一个 registrant,
   共用做不到,所以拆分时把 MCP 三项搬到了新命名空间并去掉了 `mcp` 前缀。
 - **设置页两个独立区块**:本仓 order 13「Claude 兼容」,那边 order 14「MCP 管理」。
-- 本仓 client 半边**不再 mount 任何 Remote**;`/btw` 只读 `ctx.remote.session`(harness 提供)。
+- 本仓 client 半边**不 mount 任何 Remote**,只注册字典与设置区块,不需要 `remote` / `workspaces`。
 - 两边互不 import、互不依赖,可以单独安装与卸载。
 
 MCP 的维护知识(MCP 行编写、延迟加载、预加载闸门、工具过滤、工具选择 UI、JSON 兼容)全部搬到了那边的

@@ -1,12 +1,9 @@
 /**
  * Controller bridging the Host `context-injection` settings namespace onto the
- * Harness-compat section snapshot. Reads the two rule-injection toggles and the
- * user system prompt, and writes one field at a time through the settings
- * scope.
+ * Harness-compat section snapshot. Reads the three compatibility switches —
+ * skills, memory, and scoped rules — and flips one at a time through the
+ * settings scope.
  *
- * MCP server management is a separate plugin
- * (`@zhang-guo-wen/dsh-mcp-manager`) with its own section and namespace; this
- * controller carries no MCP state.
  * @module @zhang-guo-wen/dsh-claude-compat/client/settings-controller
  */
 
@@ -16,12 +13,15 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 /** Settings namespace registered Host-side by @zhang-guo-wen/dsh-claude-compat. */
 export const CONTEXT_INJECTION_NS = 'context-injection'
 
-/** The two master toggles and the user system prompt. */
+/** The three compatibility switches. */
 export interface ContextInjectionFlags {
-  claude: boolean
-  codex: boolean
-  systemPrompt: string
+  skills: boolean
+  memory: boolean
+  rules: boolean
 }
+
+/** One independently switchable part of the compatibility surface. */
+export type InjectionSwitch = keyof ContextInjectionFlags
 
 /** Snapshot the section renders. */
 export interface ContextInjectionSectionState {
@@ -29,9 +29,9 @@ export interface ContextInjectionSectionState {
   available: boolean
   /** Whether the Host document accepts writes. */
   writable: boolean
-  claude: boolean
-  codex: boolean
-  systemPrompt: string
+  skills: boolean
+  memory: boolean
+  rules: boolean
 }
 
 /** Registration-side face for the section. */
@@ -40,10 +40,8 @@ export interface ContextInjectionSectionFace {
     /** Section snapshot bound by the renderer as useContextInjection. */
     contextInjection: SnapshotStore<ContextInjectionSectionState>
   }
-  /** Flip one master toggle. */
-  toggle: (name: 'claude' | 'codex') => void
-  /** Persist the system prompt text the user committed. */
-  updateSystemPrompt: (value: string) => void
+  /** Flip one compatibility switch. */
+  toggle: (name: InjectionSwitch) => void
 }
 
 /** Owner handle over the `context-injection` namespace. */
@@ -68,12 +66,11 @@ export class ContextInjectionController {
   inject(): ContextInjectionSectionFace {
     return {
       hooks: { contextInjection: this.store },
-      toggle: (name) => { this.toggle(name) },
-      updateSystemPrompt: (value) => { this.updateSystemPrompt(value) },
+      toggle: name => { this.toggle(name) },
     }
   }
 
-  private toggle(name: 'claude' | 'codex'): void {
+  private toggle(name: InjectionSwitch): void {
     const snapshot = this.scope.getSnapshot()
     if (snapshot.status !== 'ready' || !snapshot.writable) return
     const value = snapshot.value?.[name]
@@ -81,20 +78,14 @@ export class ContextInjectionController {
     void this.scope.set(name, !value)
   }
 
-  private updateSystemPrompt(value: string): void {
-    const snapshot = this.scope.getSnapshot()
-    if (snapshot.status !== 'ready' || !snapshot.writable) return
-    void this.scope.set('systemPrompt', value)
-  }
-
   private projection(): ContextInjectionSectionState {
     const snapshot = this.scope.getSnapshot()
     return {
       available: snapshot.status === 'ready',
       writable: snapshot.writable,
-      claude: snapshot.value?.claude ?? true,
-      codex: snapshot.value?.codex ?? true,
-      systemPrompt: snapshot.value?.systemPrompt ?? '',
+      skills: snapshot.value?.skills ?? true,
+      memory: snapshot.value?.memory ?? true,
+      rules: snapshot.value?.rules ?? true,
     }
   }
 

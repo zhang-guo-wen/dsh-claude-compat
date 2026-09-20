@@ -5,8 +5,8 @@
  * distribution can produce. The V2-to-V3 edge validates every logged source
  * against one fixed historical kind set and refuses the whole artifact when it
  * meets an unknown one, so a Session written by a plugin that invented a kind
- * can never be opened again by a later harness — `codex` and `claude-code` were
- * exactly that mistake here.
+ * can never be opened again by a later harness — the bespoke `claude-code` and
+ * `codex` kinds this package once wrote were exactly that mistake.
  *
  * `MessageSourceMap` is merge-extensible and the harness documents it as
  * "plugins add their own kinds", but that extension point belongs to the
@@ -22,13 +22,20 @@ import type { MessageSource } from '@deepseek-ai/dsh-llm'
 export const PLUGIN_ID = '@zhang-guo-wen/dsh-claude-compat'
 
 /**
+ * A contributor inside this plugin that injects instructions. `claude-code`
+ * carries the session-start memory batch, `claude-memory` a directory's memory
+ * folded after a read, and `claude-rule` a scoped rule.
+ */
+export type LoaderName = 'claude-code' | 'claude-memory' | 'claude-rule'
+
+/**
  * The source for one contributor's injected instructions. The loader name rides
  * in `plugin` so a transcript row still names which loader supplied the text,
  * while the durable kind stays inside the released set.
  * @param loader - contributor that produced the content.
  * @returns an instructions-form model source owned by this plugin.
  */
-export function instructionsSource(loader: 'claude-code' | 'codex' | 'claude-rule'): MessageSource {
+export function instructionsSource(loader: LoaderName): MessageSource {
   return { kind: 'plugin', plugin: `${PLUGIN_ID}#${loader}`, form: 'instructions' }
 }
 
@@ -47,7 +54,7 @@ export function instructionsSource(loader: 'claude-code' | 'codex' | 'claude-rul
  */
 export function isInstructionsSource(
   source: unknown,
-  loader: 'claude-code' | 'codex' | 'claude-rule',
+  loader: LoaderName,
 ): boolean {
   if (typeof source !== 'object' || source === null) return false
   const kind = (source as { kind?: unknown }).kind

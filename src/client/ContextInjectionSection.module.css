@@ -6,15 +6,12 @@
   max-width: 720px;
 }
 
-/* ---- Tab bar ---- */
-
 .panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* ---- Prompt management ---- */
 .intro {
   margin: 0;
   padding: 14px 16px;
@@ -25,54 +22,6 @@
   color: var(--dsw-alias-label-secondary);
   overflow-wrap: anywhere;
   white-space: pre-line;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.fieldLabel {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.fieldHint {
-  font-size: 12px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.promptArea {
-  /* The app has no global border-box reset; without it the textarea's padding
-     and border add to width:100% and spill past the right edge of the panel. */
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 132px;
-  resize: vertical;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font-family: var(--ds-font-family-code);
-  font-size: 12.5px;
-  line-height: 19px;
-  outline: none;
-}
-
-.promptArea::placeholder {
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.promptArea:focus {
-  border-color: var(--dsw-alias-state-business-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
-}
-
-.promptArea:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .switchSectionLabel {
@@ -86,15 +35,17 @@
 
 .switchRow {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
   padding: 12px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-.switchRow:last-child {
-  border-bottom: 0;
+/* Label block left, switch right; the compatibility list sits under both. */
+.switchHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .switchText {
@@ -114,17 +65,37 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.switchFiles {
-  font-size: 11px;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  margin-top: 2px;
-  overflow-wrap: anywhere;
+/* ---- Compatibility list under the master switch ---- */
+
+.compatList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* ---- MCP management ---- */
+.compatItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+}
 
-/* ---- MCP loading mode ---- */
+.compatTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.compatDetail {
+  font-size: 11.5px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
 
 .unavailable {
   margin: 0;
