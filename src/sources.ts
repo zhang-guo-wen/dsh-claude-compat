@@ -1,22 +1,27 @@
 /**
  * Message sources for this plugin's context contributors.
  *
- * A released Session format migrates only the message-source kinds a released
- * distribution can produce. The V2-to-V3 edge validates every logged source
- * against one fixed historical kind set and refuses the whole artifact when it
- * meets an unknown one, so a Session written by a plugin that invented a kind
- * can never be opened again by a later harness — the bespoke `claude-code` and
- * `codex` kinds this package once wrote were exactly that mistake.
+ * A durable message carries a producer-owned source kind. The harness retired
+ * the generic `plugin` wrapper — `assertV4MessageSources` refuses a session row
+ * that still names it — so each contributor declares its own kind here.
  *
- * `MessageSourceMap` is merge-extensible and the harness documents it as
- * "plugins add their own kinds", but that extension point belongs to the
- * distribution: the generic `plugin` kind is what a third-party package records
- * with, carrying its identity in `plugin` instead of in the kind.
+ * The spelling is the one the V3-to-V4 conversion gives a third-party producer:
+ * a released `{ kind: 'plugin', plugin: P }` record whose producer is neither
+ * renamed nor first-party becomes `plugin:P`. Declaring the same spelling means
+ * a Session resumed across that conversion and a Session written now agree on
+ * one kind, so `isInstructionsSource` sees one identity rather than two.
+ *
+ * This module also keeps reading the shapes earlier releases wrote: the
+ * bespoke `claude-code` / `claude-memory` / `claude-rule` kinds, and the generic
+ * `plugin` wrapper carrying this package's identity. Neither is written again —
+ * a released Session format migrates only the kinds a released distribution can
+ * produce, which is why the two bespoke kinds made older Sessions unreadable and
+ * were replaced by the producer-owned kind above.
  *
  * @module @zhang-guo-wen/dsh-claude-compat/sources
  */
 
-import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, MessageSource } from '@deepseek-ai/dsh-llm'
 
 /** Package identity recorded on every injected message this plugin produces. */
 export const PLUGIN_ID = '@zhang-guo-wen/dsh-claude-compat'
@@ -28,15 +33,34 @@ export const PLUGIN_ID = '@zhang-guo-wen/dsh-claude-compat'
  */
 export type LoaderName = 'claude-code' | 'claude-memory' | 'claude-rule'
 
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code':
+      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code' } & ContextFormed
+    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory':
+      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory' } & ContextFormed
+    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule':
+      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule' } & ContextFormed
+  }
+}
+
+/** The producer-owned kind one contributor records. */
+export type InstructionsSourceKind = `plugin:${typeof PLUGIN_ID}#${LoaderName}`
+
+/** One contributor's source: its own kind and the instructions form. */
+const INSTRUCTIONS_SOURCES: Readonly<Record<LoaderName, MessageSource>> = {
+  'claude-code': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code', form: 'instructions' },
+  'claude-memory': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory', form: 'instructions' },
+  'claude-rule': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule', form: 'instructions' },
+}
+
 /**
- * The source for one contributor's injected instructions. The loader name rides
- * in `plugin` so a transcript row still names which loader supplied the text,
- * while the durable kind stays inside the released set.
+ * The source for one contributor's injected instructions.
  * @param loader - contributor that produced the content.
  * @returns an instructions-form model source owned by this plugin.
  */
 export function instructionsSource(loader: LoaderName): MessageSource {
-  return { kind: 'plugin', plugin: `${PLUGIN_ID}#${loader}`, form: 'instructions' }
+  return { ...INSTRUCTIONS_SOURCES[loader] }
 }
 
 /**
@@ -44,10 +68,11 @@ export function instructionsSource(loader: LoaderName): MessageSource {
  * contributor.
  *
  * The contributors ask this of a session log to avoid folding the same rules in
- * twice. Both shapes answer yes: the current `plugin` source, and the two
- * bespoke kinds this package wrote before it moved onto that source. Reading the
- * legacy names back never writes them again — it only keeps a resumed Session
- * that already carries the content from receiving it a second time.
+ * twice. Every shape this package has ever written answers yes: the current
+ * producer-owned kind, the generic `plugin` wrapper it replaced, and the two
+ * bespoke kinds written before either. Reading the retired names back never
+ * writes them again — it only keeps a resumed Session that already carries the
+ * content from receiving it a second time.
  * @param source - a logged message's `source` value, of unknown provenance.
  * @param loader - contributor whose earlier injection is being looked for.
  * @returns whether that contributor already supplied instructions here.
@@ -59,5 +84,6 @@ export function isInstructionsSource(
   if (typeof source !== 'object' || source === null) return false
   const kind = (source as { kind?: unknown }).kind
   if (kind === loader) return true
+  if (kind === `plugin:${PLUGIN_ID}#${loader}`) return true
   return kind === 'plugin' && (source as { plugin?: unknown }).plugin === `${PLUGIN_ID}#${loader}`
 }

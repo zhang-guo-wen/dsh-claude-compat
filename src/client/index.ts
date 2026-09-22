@@ -3,8 +3,8 @@
  * `settings.contextInjection` dictionary and the one `settings.section` entry
  * that presents the Claude compatibility master switch.
  *
- * The section reads and writes the `context-injection` namespace the Host
- * `@zhang-guo-wen/dsh-claude-compat` plugin owns, so the switch and the
+ * The section reads and writes the `claude-compat` namespace the Host
+ * `@zhang-guo-wen/dsh-claude-compat` row owns, so the switch and the
  * injection behavior share one setting.
  * @module @zhang-guo-wen/dsh-claude-compat/client
  */
@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: the settings namespace scope merge (ctx.settingsScope) and slot types.
+// Type-only: the configuration-form service merge (ctx.configForms) and slot types.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the slot registry Context merge (ctx.slots).
@@ -37,7 +37,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'settingsScope']
+export const inject = ['slots', 'locale', 'configForms']
 
 /**
  * Register the dictionary and the context-injection settings section.
@@ -47,9 +47,9 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-context-injection: dictionaries')
   const t = ctx.locale.bind(NS)
   const controller = new ContextInjectionController(
-    ctx.settingsScope.bind<ContextInjectionFlags>({ namespace: CONTEXT_INJECTION_NS }),
+    ctx.configForms.get<ContextInjectionFlags>(CONTEXT_INJECTION_NS),
   )
-  ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: scope')
+  ctx.effect(() => () => { controller.dispose() }, 'ui-context-injection: settings form')
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',

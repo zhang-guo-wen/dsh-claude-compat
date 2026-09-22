@@ -1,17 +1,17 @@
 /**
- * Controller bridging the Host `context-injection` settings namespace onto the
+ * Controller bridging the Host `claude-compat` settings namespace onto the
  * Harness-compat section snapshot. Reads the three compatibility switches —
  * skills, memory, and scoped rules — and flips one at a time through the
- * settings scope.
+ * configuration form.
  *
  * @module @zhang-guo-wen/dsh-claude-compat/client/settings-controller
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** Settings namespace registered Host-side by @zhang-guo-wen/dsh-claude-compat. */
-export const CONTEXT_INJECTION_NS = 'context-injection'
+/** Settings namespace registered Host-side by @zhang-guo-wen/dsh-claude-compat: the Loader row id. */
+export const CONTEXT_INJECTION_NS = 'claude-compat'
 
 /** The three compatibility switches. */
 export interface ContextInjectionFlags {
@@ -50,9 +50,9 @@ export class ContextInjectionController {
   private readonly unsubscribe: () => void
 
   /**
-   * @param scope - bound `context-injection` settings scope.
+   * @param scope - the `claude-compat` configuration form.
    */
-  constructor(private readonly scope: SettingsScope<ContextInjectionFlags>) {
+  constructor(private readonly scope: ConfigForm<ContextInjectionFlags>) {
     this.store = createSnapshotStore(this.projection())
     this.unsubscribe = scope.subscribe(() => this.publish())
   }

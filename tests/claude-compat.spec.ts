@@ -10,8 +10,19 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { parseClaudeSkill } from '../src/parse.ts'
 import { ClaudeCodeSkillProvider } from '../src/provider.ts'
 import { loadClaudeInstructions, foldContext, injectIntoFirstRequest } from '../src/instructions.ts'
-import { apply, inject } from '../src/index.ts'
-import { registerContextInjection } from '../src/context-injection.ts'
+import { apply, Config, CONTEXT_INJECTION_NAMESPACE, inject, name } from '../src/index.ts'
+import { contextInjectionFlags } from '../src/context-injection.ts'
+import { instructionsSource, isInstructionsSource, PLUGIN_ID } from '../src/sources.ts'
+
+/** The three live switches a resolved Config carries. */
+function config(over: { skills?: boolean; rules?: boolean; memory?: boolean } = {}): Config {
+  const value = { skills: true, rules: true, memory: true, ...over }
+  return {
+    skills: { get: () => value.skills },
+    rules: { get: () => value.rules },
+    memory: { get: () => value.memory },
+  } as Config
+}
 
 const SKILL_MD = `---
 name: my-skill
@@ -163,8 +174,7 @@ describe('foldContext', () => {
     const injected = folded[1]!
     expect(injected.content).toEqual([{ type: 'text', text: 'injected rule' }])
     expect(injected.source).toEqual({
-      kind: 'plugin',
-      plugin: '@zhang-guo-wen/dsh-claude-compat#claude-code',
+      kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code',
       form: 'instructions',
     })
   })
@@ -173,8 +183,7 @@ describe('foldContext', () => {
     const direct: UserMessage = createUserMessage({ content: [{ type: 'text', text: 'prompt' }], source: { kind: 'user' } })
     const folded = foldContext([direct], 'nested memory', 'claude-memory')
     expect(folded[1]?.source).toEqual({
-      kind: 'plugin',
-      plugin: '@zhang-guo-wen/dsh-claude-compat#claude-memory',
+      kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory',
       form: 'instructions',
     })
   })
@@ -203,44 +212,37 @@ describe('injectIntoFirstRequest', () => {
 })
 
 describe('plugin composition', () => {
-  /**
-   * A minimal plugin context. `inject` stands in for the Cordis dependency
-   * gate, handing back a scope carrying the settings service so the namespace
-   * registration runs.
-   */
-  function stubCtx(): { ctx: Context; listeners: string[]; namespaces: string[]; providers: number } {
+  /** A minimal plugin context: the skills registry and the two event surfaces. */
+  function stubCtx(): { ctx: Context; listeners: string[]; providers: number } {
     const listeners: string[] = []
-    const namespaces: string[] = []
-    const scope = {
-      get: () => ({ skills: true, rules: true, memory: true }),
-      watch: () => () => {},
-    }
     const state = { providers: 0 }
     const ctx = {
       skills: { registerProvider: () => { state.providers += 1; return () => {} } },
       on: (event: string) => { listeners.push(event); return () => {} },
-      inject: (_deps: readonly string[], callback: (scope: { settings: unknown }) => void) => {
-        callback({ settings: { register: (namespace: string) => { namespaces.push(namespace); return scope } } })
-      },
       get: () => undefined,
     } as unknown as Context
     return {
       ctx,
       listeners,
-      namespaces,
       get providers() { return state.providers },
     }
   }
 
-  it('registers the skill provider, both contributors, and the settings namespace', async () => {
+  it('registers the skill provider and both contributors', async () => {
     const stub = stubCtx()
-    await apply(stub.ctx, {})
+    await apply(stub.ctx, config())
 
     expect(stub.providers).toBe(1)
     // The memory contributor and the scoped-rule contributor each follow the
     // pre-step waterfall and each watch reads.
     expect(stub.listeners).toEqual(['agent/pre-step', 'tools/result', 'agent/pre-step', 'tools/result'])
-    expect(stub.namespaces).toEqual(['context-injection'])
+  })
+
+  it('publishes the three switches as live fields of its own row', () => {
+    expect(CONTEXT_INJECTION_NAMESPACE).toBe(name)
+    for (const field of ['skills', 'rules', 'memory'] as const) {
+      expect(Config.dict?.[field]?.meta.volatile).toBe(true)
+    }
   })
 
   it('registers nothing beyond the skills service it declares', () => {
@@ -250,33 +252,50 @@ describe('plugin composition', () => {
   })
 })
 
-describe('registerContextInjection', () => {
-  /** A context whose settings service resolves to `section` (or is absent). */
-  function settingsCtx(section?: Record<string, boolean>): Context {
-    return {
-      inject: (_deps: readonly string[], callback: (scope: { settings: unknown }) => void) => {
-        if (section === undefined) return
-        callback({
-          settings: {
-            register: () => ({ get: () => section, watch: () => () => {} }),
-          },
-        })
-      },
-    } as unknown as Context
-  }
-
-  it('defaults all three switches on without a settings service', () => {
-    const flags = registerContextInjection(settingsCtx(), {})
-    expect(flags()).toEqual({ skills: true, rules: true, memory: true })
+describe('instructionsSource', () => {
+  it('records the producer-owned kind the conversion would give this package', () => {
+    // `plugin:<identity>` is what the V3-to-V4 conversion makes of a third-party
+    // `{ kind: 'plugin', plugin: <identity> }` record, so both spell the same kind.
+    expect(instructionsSource('claude-code')).toEqual({
+      kind: `plugin:${PLUGIN_ID}#claude-code`,
+      form: 'instructions',
+    })
   })
 
-  it('takes each switch from the composition when the user document is silent', () => {
-    const flags = registerContextInjection(settingsCtx(), { skills: false, memory: false })
+  it('recognizes the producer kind for its own loader only', () => {
+    const source = instructionsSource('claude-rule')
+    expect(isInstructionsSource(source, 'claude-rule')).toBe(true)
+    expect(isInstructionsSource(source, 'claude-code')).toBe(false)
+  })
+
+  it('still recognizes every shape earlier releases wrote', () => {
+    expect(isInstructionsSource({ kind: 'plugin', plugin: `${PLUGIN_ID}#claude-memory` }, 'claude-memory')).toBe(true)
+    expect(isInstructionsSource({ kind: 'claude-code' }, 'claude-code')).toBe(true)
+    expect(isInstructionsSource({ kind: 'plugin', plugin: 'other-package#claude-code' }, 'claude-code')).toBe(false)
+    expect(isInstructionsSource({ kind: 'claude-memory' }, 'claude-code')).toBe(false)
+    expect(isInstructionsSource(null, 'claude-code')).toBe(false)
+  })
+})
+
+describe('contextInjectionFlags', () => {
+  it('defaults all three switches on', () => {
+    expect(contextInjectionFlags(config())()).toEqual({ skills: true, rules: true, memory: true })
+  })
+
+  it('carries each composed switch through', () => {
+    const flags = contextInjectionFlags(config({ skills: false, memory: false }))
     expect(flags()).toEqual({ skills: false, rules: true, memory: false })
   })
 
-  it('lets the user document override the composition per switch', () => {
-    const flags = registerContextInjection(settingsCtx({ skills: true, rules: true, memory: false }), { skills: false })
+  it('observes a value committed after the reader was built', () => {
+    const live = { skills: false, rules: true, memory: true }
+    const flags = contextInjectionFlags({
+      skills: { get: () => live.skills },
+      rules: { get: () => live.rules },
+      memory: { get: () => live.memory },
+    } as Config)
+    live.skills = true
+    live.memory = false
     expect(flags()).toEqual({ skills: true, rules: true, memory: false })
   })
 })

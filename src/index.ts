@@ -15,33 +15,42 @@
  * @module @zhang-guo-wen/dsh-claude-compat
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-skill'
 import { ClaudeCodeSkillProvider, type Config as ProviderConfig } from './provider.ts'
 import { claudeInstructionListener, type InstructionConfig } from './instructions.ts'
 import { claudeRulesListener, type RulesConfig } from './rules.ts'
 import {
-  registerContextInjection,
-  type ContextInjectionConfig,
+  contextInjectionFlags,
+  CONTEXT_INJECTION_NAMESPACE,
+  CONTEXT_INJECTION_SCHEMA,
 } from './context-injection.ts'
 
 export { instructionsSource, isInstructionsSource, PLUGIN_ID } from './sources.ts'
-export { CONTEXT_INJECTION_NAMESPACE, registerContextInjection } from './context-injection.ts'
-export type { ContextInjectionConfig, ContextInjectionFlags, InjectionFlagsSource } from './context-injection.ts'
+export { CONTEXT_INJECTION_NAMESPACE, CONTEXT_INJECTION_SCHEMA, contextInjectionFlags }
+export type {
+  ContextInjectionConfig, ContextInjectionFlags, InjectionFlags, InjectionFlagsSource, InjectionSwitch,
+} from './context-injection.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'claude-compat'
 
-/** Services required by this plugin; `settings` is probed lazily. */
+/** Services required by this plugin; the settings page is served from the row Config. */
 export const inject = ['skills']
 
-/** Config forwarded to the provider, the memory contributor, the rule contributor, and the namespace. */
-export interface Config
-  extends ProviderConfig, InstructionConfig, RulesConfig, ContextInjectionConfig {}
+/** Config forwarded to the provider, the memory contributor, the rule contributor, and the settings page.
+ * The three switches are the row's live fields; a composition sets their defaults under `config:`. */
+export interface Config extends ProviderConfig, InstructionConfig, RulesConfig {
+  /** Whether `.claude/skills` roots join the session skill catalog. */
+  skills: Volatile<boolean>
+  /** Whether `.claude/rules/**` scoped rules are folded into the request. */
+  rules: Volatile<boolean>
+  /** Whether the Claude Code memory files are folded into the request. */
+  memory: Volatile<boolean>
+}
 
-export const Config: Schema<Config> = z.object({
+export const Config = z.object({
   providerName: z.string().min(1).default('claude-code'),
   claudeHome: z.string(),
   projectRootMarkers: z.array(z.string()).default(['.git']),
@@ -62,9 +71,8 @@ export const Config: Schema<Config> = z.object({
   maxMemorySourceBytes: z.number().step(1).min(1).default(4_194_304),
   maxMemoryRenderBytes: z.number().step(1).min(0).default(262_144),
   maxImportDepth: z.number().step(1).min(0).default(4),
-  skills: z.boolean().default(true),
-  rules: z.boolean().default(true),
-  memory: z.boolean().default(true),
+  // The live switches live beside the namespace reader that consumes them.
+  ...CONTEXT_INJECTION_SCHEMA.dict,
 })
 
 /**
@@ -88,12 +96,13 @@ function pickDefined<T extends object, K extends keyof T>(
 }
 
 /**
- * Register the Claude Code skill provider, the memory and scoped-rule
- * contributors, and the `context-injection` namespace. Each of the three
- * follows its own settings switch.
+ * Register the Claude Code skill provider and the memory and scoped-rule
+ * contributors. Each of the three follows its own live settings switch.
+ * @param ctx - plugin context.
+ * @param config - the row's resolved configuration.
  */
-export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  const flags = registerContextInjection(ctx, config)
+export async function apply(ctx: Context, config: Config): Promise<void> {
+  const flags = contextInjectionFlags(config)
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().skills }))
   claudeInstructionListener(ctx, pickDefined(config, [
     'claudeHome',

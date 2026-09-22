@@ -3,113 +3,74 @@
  * the Claude Code compatibility surface this plugin applies — the skill
  * catalog, the memory files, and the scoped rules.
  *
- * The switches resolve through `ctx.settings` (the settings seam) so they are
- * user-editable in a local document and persist across restarts, falling back
- * to composition `base` values (from the plugin `config`) when the user has not
- * overridden them. The settings service is optional: without one mounted, the
- * reader stays pinned to the composition `base`.
+ * The switches are this plugin's Loader row Config, so the profile entry id
+ * (`claude-compat`) is the namespace the settings page addresses and the schema
+ * below is the live form it renders. Each field is volatile, so a committed
+ * change reaches the running plugin without a remount; the reader below always
+ * observes the value as it stands at call time.
  *
- * This file deliberately accesses `ctx.settings` through a small local
- * interface rather than a hard dependency on the settings package, so this
- * package stays composable in trees that do not mount the settings provider.
+ * A composition that wants a different starting point sets the same fields under
+ * the row's `config:`, which the schema defaults sit beneath.
  *
  * @module @zhang-guo-wen/dsh-claude-compat/context-injection
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 
-/** Settings namespace owned by this plugin. */
-export const CONTEXT_INJECTION_NAMESPACE = 'context-injection'
+/** Settings namespace owned by this plugin: its Loader row id. */
+export const CONTEXT_INJECTION_NAMESPACE = 'claude-compat'
 
 /** One independently switchable part of the compatibility surface. */
 export type InjectionSwitch = 'skills' | 'rules' | 'memory'
 
-/** The settings this plugin surfaces to the settings UI. */
+/** The injection preferences this plugin publishes as live settings fields. */
 export interface ContextInjectionFlags {
   /** Whether `.claude/skills` roots are added to the session skill catalog. */
-  skills: boolean
+  skills: Volatile<boolean>
   /** Whether `.claude/rules/**` scoped rules are folded into the request. */
-  rules: boolean
+  rules: Volatile<boolean>
   /** Whether the Claude Code memory files are folded into the request. */
+  memory: Volatile<boolean>
+}
+
+/** Schema served to settings clients for the injection preferences.
+ * The inferred type is the source of truth: `.volatile()` produces the `Volatile` accessors above. */
+export const CONTEXT_INJECTION_SCHEMA = z.object({
+  skills: z.boolean().default(true).volatile(),
+  rules: z.boolean().default(true).volatile(),
+  memory: z.boolean().default(true).volatile(),
+})
+
+/** Composition-layer defaults accepted under the row's `config:`. */
+export interface ContextInjectionConfig {
+  skills?: boolean
+  rules?: boolean
+  memory?: boolean
+}
+
+/** The three switches as plain values. */
+export interface InjectionFlags {
+  skills: boolean
+  rules: boolean
   memory: boolean
 }
 
-/** Schema served to settings clients for the injection preferences. */
-export const CONTEXT_INJECTION_SCHEMA: Schema<ContextInjectionFlags> = z.object({
-  skills: z.boolean().default(true),
-  rules: z.boolean().default(true),
-  memory: z.boolean().default(true),
-})
-
-/** Composition-layer defaults for the switches when a plugin uses them. */
-export type ContextInjectionConfig = Partial<ContextInjectionFlags>
-
-/** A live {@link ContextInjectionFlags} reader (detached snapshots). */
-export type InjectionFlagsSource = () => ContextInjectionFlags
+/** A live {@link InjectionFlags} reader (detached snapshots). */
+export type InjectionFlagsSource = () => InjectionFlags
 
 /**
- * Minimal local shape of the `settings.register` owner scope we consume. The
- * value types are the same as `@deepseek-ai/dsh-settings` exposes; declaring
- * them here keeps this package free of a hard reference to that service so it
- * can be composed even where the provider is absent.
- */
-interface SettingsScopeLike<T> {
-  get(): T
-  watch(callback: (next: T, prev: T) => void): () => void
-}
-
-interface SettingsRegisterOptionsLike<T> {
-  base?: Partial<T>
-  applies?: 'live' | 'restart'
-}
-
-interface SettingsProviderLike {
-  register<T>(
-    namespace: string,
-    schema: unknown,
-    options?: SettingsRegisterOptionsLike<T>,
-  ): SettingsScopeLike<T>
-}
-
-/**
- * Register the `context-injection` namespace and return a live reader.
+ * Read the three switches as plain values.
  *
- * When the settings service is mounted, the namespace is registered and the
- * reader follows committed changes. Without a settings service the reader stays
- * pinned to the composition `base`. A namespace already owned by another plugin
- * keeps that owner's reader — we never throw.
- *
- * @param ctx - plugin context (uses `ctx.get('settings')` when present).
- * @param config - composition defaults for the three switches.
- * @returns a thunk returning the current flags.
+ * The contributors call the returned thunk per request, so a committed change
+ * needs no listener and no re-registration.
+ * @param config - the plugin's resolved configuration.
+ * @returns a thunk returning the switches as they stand at call time.
  */
-export function registerContextInjection(
-  ctx: Context,
-  config: ContextInjectionConfig = {},
-): InjectionFlagsSource {
-  const base: ContextInjectionFlags = {
-    skills: config.skills ?? true,
-    rules: config.rules ?? true,
-    memory: config.memory ?? true,
-  }
-  let source: InjectionFlagsSource = () => ({ ...base })
-  ctx.inject(['settings'], (settingsCtx) => {
-    const provider = (settingsCtx as unknown as { settings: SettingsProviderLike }).settings
-    try {
-      const scope = provider.register<ContextInjectionFlags>(
-        CONTEXT_INJECTION_NAMESPACE,
-        CONTEXT_INJECTION_SCHEMA,
-        { base, applies: 'live' },
-      )
-      source = () => ({ ...scope.get() })
-      scope.watch((next) => {
-        source = () => ({ ...next })
-      })
-    } catch {
-      // Another owner already registered this namespace; keep our base.
-    }
+export function contextInjectionFlags(config: ContextInjectionFlags): InjectionFlagsSource {
+  return () => ({
+    skills: config.skills.get(),
+    rules: config.rules.get(),
+    memory: config.memory.get(),
   })
-  return () => ({ ...source() })
 }
