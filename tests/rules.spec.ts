@@ -123,7 +123,7 @@ describe('renderRules and foldRulesContext', () => {
     const injected = folded[1]!
     expect(injected.content).toEqual([{ type: 'text', text: 'injected rule' }])
     expect(injected.source).toEqual({
-      kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule',
+      kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-rule',
       form: 'instructions',
     })
   })

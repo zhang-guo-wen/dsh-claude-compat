@@ -6,7 +6,7 @@
  * the page states the compatibility surface itself instead of pointing at the
  * README.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/client/ContextInjectionSection
+ * @module @guowenzhang/dsh-claude-compat/client/ContextInjectionSection
  */
 
 import type { ReactNode } from 'react'

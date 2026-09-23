@@ -174,7 +174,7 @@ describe('foldContext', () => {
     const injected = folded[1]!
     expect(injected.content).toEqual([{ type: 'text', text: 'injected rule' }])
     expect(injected.source).toEqual({
-      kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code',
+      kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-code',
       form: 'instructions',
     })
   })
@@ -183,7 +183,7 @@ describe('foldContext', () => {
     const direct: UserMessage = createUserMessage({ content: [{ type: 'text', text: 'prompt' }], source: { kind: 'user' } })
     const folded = foldContext([direct], 'nested memory', 'claude-memory')
     expect(folded[1]?.source).toEqual({
-      kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory',
+      kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-memory',
       form: 'instructions',
     })
   })

@@ -12,7 +12,7 @@
  * Client: `src/client` bundles the settings page into a `window.__ModuleLoader__`
  * handoff artifact served at `/plugins/<id>/client.js`.
  *
- * @module @zhang-guo-wen/dsh-claude-compat
+ * @module @guowenzhang/dsh-claude-compat
  */
 
 import type { Context, Volatile } from '@deepseek-ai/cordis'

@@ -22,7 +22,7 @@
 - **设置页。** 技能、记忆、规则各一个开关，每个开关下面列出它加载什么、什么时候加载。
 
 MCP 服务器管理（增删改、按需加载、工具过滤）是**另一个独立插件**
-[`@zhang-guo-wen/dsh-mcp-manager`](https://github.com/zhang-guo-wen/dsh-mcp-manager)。
+[`@guowenzhang/dsh-mcp-manager`](https://github.com/zhang-guo-wen/dsh-mcp-manager)。
 
 ## 安装
 
@@ -55,7 +55,7 @@ npx @deepseek-ai/dsh web
 ```
 
 **不要手写 profile 清单**：`dsh plugin add` 会同时加依赖条目与 bundle 条目。
-卸载用 `dsh plugin --profile web remove @zhang-guo-wen/dsh-claude-compat`，依赖与层一起移除。
+卸载用 `dsh plugin --profile web remove @guowenzhang/dsh-claude-compat`，依赖与层一起移除。
 
 ## 配置
 
@@ -85,7 +85,7 @@ npx @deepseek-ai/dsh web
 | `maxRuleRenderBytes` | `262144` | 单批规则最多渲染的 UTF-8 字节 |
 
 ```yaml
-- name: '@zhang-guo-wen/dsh-claude-compat'
+- name: '@guowenzhang/dsh-claude-compat'
   config:
     skills: true
     memory: true

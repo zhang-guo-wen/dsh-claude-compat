@@ -7,7 +7,7 @@
  * project-root walk, so the memory, rule, and skill loaders agree on which
  * directory is the project root and on what "the file is there" means.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/file-text
+ * @module @guowenzhang/dsh-claude-compat/file-text
  */
 
 import { homedir } from 'node:os'

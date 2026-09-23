@@ -23,7 +23,7 @@
  * memory message that compaction shadowed folds again from disk — the same
  * behavior Claude Code gives a project `CLAUDE.md` after `/compact`.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/instructions
+ * @module @guowenzhang/dsh-claude-compat/instructions
  */
 
 import type { Context } from '@deepseek-ai/cordis'

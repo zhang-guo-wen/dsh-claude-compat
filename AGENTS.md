@@ -2,12 +2,12 @@
 
 本仓 `dsh-claude-compat` 是**独立于 harness monorepo** 的 DeepSeek Harness (DSH) 插件：
 提供 Claude Code 兼容(技能发现、记忆文件、作用域规则)与「Claude 兼容」设置页。
-MCP 管理是另一个仓(`@zhang-guo-wen/dsh-mcp-manager`),见下。
+MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见下。
 它不打包 `@deepseek-ai/*`,运行时从宿主 harness 解析这些包。
 
 ## 目录
 
-仓库根**就是**包:`package.json` 即 `@zhang-guo-wen/dsh-claude-compat`。
+仓库根**就是**包:`package.json` 即 `@guowenzhang/dsh-claude-compat`。
 这不是风格选择——`dsh plugin add <git-url>` 取的是仓库根,包放在 `packages/*` 下会被装成错误的东西。
 
 - `src/` —— host 入口 `index.ts`;浏览器半边在 `src/client/`。
@@ -64,7 +64,7 @@ React,所以装载 `dsh-agent-loop` 的真实组合用例与组件渲染用例�
 ## MCP 管理已拆分
 
 MCP 服务器管理(行的增删改、加载模式、工具过滤、「MCP 管理」设置页区块)是**独立的插件仓**
-`@zhang-guo-wen/dsh-mcp-manager`(`../dsh-mcp-manager`)。本仓不再包含任何 MCP 代码,也不注册 Typert Remote。
+`@guowenzhang/dsh-mcp-manager`(`../dsh-mcp-manager`)。本仓不再包含任何 MCP 代码,也不注册 Typert Remote。
 
 两边的关系:
 

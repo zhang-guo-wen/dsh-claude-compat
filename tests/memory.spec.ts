@@ -645,7 +645,7 @@ describe('claudeInstructionListener', () => {
       await writeMemoryFile(project, '.claude/CLAUDE.md', 'baseline memory')
       const resumed = createUserMessage({
         content: [{ type: 'text', text: 'Instructions from: .claude/CLAUDE.md\n\nbaseline memory' }],
-        source: { kind: 'plugin', plugin: '@zhang-guo-wen/dsh-claude-compat#claude-code', form: 'instructions' },
+        source: { kind: 'plugin', plugin: '@guowenzhang/dsh-claude-compat#claude-code', form: 'instructions' },
       })
 
       const test = harness(project, [resumed])

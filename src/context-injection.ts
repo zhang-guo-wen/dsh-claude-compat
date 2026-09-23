@@ -12,7 +12,7 @@
  * A composition that wants a different starting point sets the same fields under
  * the row's `config:`, which the schema defaults sit beneath.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/context-injection
+ * @module @guowenzhang/dsh-claude-compat/context-injection
  */
 
 import type { Volatile } from '@deepseek-ai/cordis'

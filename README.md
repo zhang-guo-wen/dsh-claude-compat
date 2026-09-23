@@ -23,7 +23,7 @@ It does not bundle `@deepseek-ai/*`; those resolve from the host harness at runt
 - **Settings page.** One switch per part of the surface — skills, memory, rules — each listing what it loads and when.
 
 MCP server management — authoring rows, on-demand loading, and tool filters — is its own plugin,
-[`@zhang-guo-wen/dsh-mcp-manager`](https://github.com/zhang-guo-wen/dsh-mcp-manager).
+[`@guowenzhang/dsh-mcp-manager`](https://github.com/zhang-guo-wen/dsh-mcp-manager).
 
 ## Install
 
@@ -57,7 +57,7 @@ npx @deepseek-ai/dsh web
 ```
 
 You do not edit the profile manifest by hand: `dsh plugin add` adds both the dependency and the bundle entry.
-Remove it, dependency and layer together, with `dsh plugin --profile web remove @zhang-guo-wen/dsh-claude-compat`.
+Remove it, dependency and layer together, with `dsh plugin --profile web remove @guowenzhang/dsh-claude-compat`.
 
 ## Configuration
 
@@ -88,7 +88,7 @@ settings-page switch each.
 | `maxRuleRenderBytes` | `262144` | Maximum UTF-8 bytes rendered in one rules batch |
 
 ```yaml
-- name: '@zhang-guo-wen/dsh-claude-compat'
+- name: '@guowenzhang/dsh-claude-compat'
   config:
     skills: true
     memory: true

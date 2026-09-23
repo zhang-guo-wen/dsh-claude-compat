@@ -4,13 +4,13 @@
  * skills, memory, and scoped rules — and flips one at a time through the
  * configuration form.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/client/settings-controller
+ * @module @guowenzhang/dsh-claude-compat/client/settings-controller
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** Settings namespace registered Host-side by @zhang-guo-wen/dsh-claude-compat: the Loader row id. */
+/** Settings namespace registered Host-side by @guowenzhang/dsh-claude-compat: the Loader row id. */
 export const CONTEXT_INJECTION_NS = 'claude-compat'
 
 /** The three compatibility switches. */

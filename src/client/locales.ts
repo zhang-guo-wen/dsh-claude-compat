@@ -6,7 +6,7 @@
  * Chinese dictionary is part of {@link ContextInjectionSectionKey}, and `en` is
  * typed against it, so a new entry cannot ship untranslated.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/client/locales
+ * @module @guowenzhang/dsh-claude-compat/client/locales
  */
 
 /** Locale namespace owned by this plugin. */

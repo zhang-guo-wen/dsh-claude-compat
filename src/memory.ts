@@ -21,7 +21,7 @@
  * set therefore reaches the model once, from here, under Claude Code's rules.
  * The auto-memory index is this module's alone: no other loader knows it.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/memory
+ * @module @guowenzhang/dsh-claude-compat/memory
  */
 
 import { homedir } from 'node:os'

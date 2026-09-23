@@ -4,9 +4,9 @@
  * that presents the Claude compatibility master switch.
  *
  * The section reads and writes the `claude-compat` namespace the Host
- * `@zhang-guo-wen/dsh-claude-compat` row owns, so the switch and the
+ * `@guowenzhang/dsh-claude-compat` row owns, so the switch and the
  * injection behavior share one setting.
- * @module @zhang-guo-wen/dsh-claude-compat/client
+ * @module @guowenzhang/dsh-claude-compat/client
  */
 
 import type { Context } from '@deepseek-ai/cordis'

@@ -6,7 +6,7 @@
  * Harness's own `agent-instructions` uses, so a reader of the transcript sees
  * one convention whichever loader supplied the text.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/render
+ * @module @guowenzhang/dsh-claude-compat/render
  */
 
 /** One file's rendered contribution to an injected instructions message. */

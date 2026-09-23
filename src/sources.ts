@@ -18,13 +18,13 @@
  * produce, which is why the two bespoke kinds made older Sessions unreadable and
  * were replaced by the producer-owned kind above.
  *
- * @module @zhang-guo-wen/dsh-claude-compat/sources
+ * @module @guowenzhang/dsh-claude-compat/sources
  */
 
 import type { ContextFormed, MessageSource } from '@deepseek-ai/dsh-llm'
 
 /** Package identity recorded on every injected message this plugin produces. */
-export const PLUGIN_ID = '@zhang-guo-wen/dsh-claude-compat'
+export const PLUGIN_ID = '@guowenzhang/dsh-claude-compat'
 
 /**
  * A contributor inside this plugin that injects instructions. `claude-code`
@@ -35,12 +35,12 @@ export type LoaderName = 'claude-code' | 'claude-memory' | 'claude-rule'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code':
-      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code' } & ContextFormed
-    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory':
-      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory' } & ContextFormed
-    'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule':
-      { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule' } & ContextFormed
+    'plugin:@guowenzhang/dsh-claude-compat#claude-code':
+      { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-code' } & ContextFormed
+    'plugin:@guowenzhang/dsh-claude-compat#claude-memory':
+      { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-memory' } & ContextFormed
+    'plugin:@guowenzhang/dsh-claude-compat#claude-rule':
+      { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-rule' } & ContextFormed
   }
 }
 
@@ -49,9 +49,9 @@ export type InstructionsSourceKind = `plugin:${typeof PLUGIN_ID}#${LoaderName}`
 
 /** One contributor's source: its own kind and the instructions form. */
 const INSTRUCTIONS_SOURCES: Readonly<Record<LoaderName, MessageSource>> = {
-  'claude-code': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-code', form: 'instructions' },
-  'claude-memory': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-memory', form: 'instructions' },
-  'claude-rule': { kind: 'plugin:@zhang-guo-wen/dsh-claude-compat#claude-rule', form: 'instructions' },
+  'claude-code': { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-code', form: 'instructions' },
+  'claude-memory': { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-memory', form: 'instructions' },
+  'claude-rule': { kind: 'plugin:@guowenzhang/dsh-claude-compat#claude-rule', form: 'instructions' },
 }
 
 /**

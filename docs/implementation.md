@@ -3,7 +3,7 @@ description: "Claude Code compatibility for the DeepSeek Harness: .claude/skills
 kind: "package-reference"
 ---
 
-# @zhang-guo-wen/dsh-claude-compat
+# @guowenzhang/dsh-claude-compat
 
 English | [中文](implementation.zh.md)
 
