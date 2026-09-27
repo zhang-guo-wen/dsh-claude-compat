@@ -1,0 +1,104 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.intro {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-module-platform);
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.switchSectionLabel {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.switchRow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+/* Label block left, switch right; the compatibility list sits under both. */
+.switchHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.switchLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.switchDesc {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ---- Compatibility list under the master switch ---- */
+
+.compatList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compatItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+}
+
+.compatTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.compatDetail {
+  font-size: 11.5px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.unavailable {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}
