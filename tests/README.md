@@ -35,6 +35,8 @@ no Harness runtime package and no React requires:
 
 - `tests/memory.spec.ts` — memory-file discovery, `@path` imports, auto memory,
   nested memory, the `CLAUDE.md` takeover, and the listener.
+- `tests/memory-write.spec.ts` — Claude auto-memory topic creation, index updates,
+  path restrictions, and the independent live write switch.
 - `tests/claude-compat.spec.ts` — `SKILL.md` parsing, the skill provider, memory
   loading, and the plugin registration.
 

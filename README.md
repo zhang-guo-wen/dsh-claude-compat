@@ -8,7 +8,7 @@ DeepSeek Harness (`dsh`) is the open-source agent harness from DeepSeek AI, wher
 
 ## The problem this plugin solves
 
-Skills, memory files and path-scoped rules kept in the Claude Code `.claude/` layout are invisible to a DSH session; this plugin loads all three and gives each one a switch in **设置 → Claude 兼容**.
+Skills, memory files and path-scoped rules kept in the Claude Code `.claude/` layout are invisible to a DSH session; this plugin loads them and can write new memories into Claude's project auto-memory directory. All four capabilities have separate switches in **设置 → Claude 兼容**.
 
 ## Screenshots
 
@@ -26,7 +26,7 @@ From the npm registry: <https://www.npmjs.com/package/@guowenzhang/dsh-claude-co
 
 ### Open the settings page
 
-The plugin adds one section to the settings page: **设置 → Claude 兼容**. It holds three switches — **加载技能**, **加载记忆**, and **加载规则** — and each row lists what that switch loads and when, so the page states the compatibility surface itself instead of pointing at a README. All three are on by default, and a flipped switch is a live setting: it reaches the running plugin without restarting the host.
+The plugin adds one settings section: **设置 → Claude 兼容**. It has four switches: **加载技能**, **加载记忆**, **写入记忆**, and **加载规则**. The three loading switches are on by default; writing is off by default. Changes take effect in the running plugin by the next request, without restarting the host.
 
 ### Load Claude Code skills
 
@@ -46,6 +46,10 @@ The plugin adds one section to the settings page: **设置 → Claude 兼容**. 
 
 `@path` imports expand in place, relative to the importing file, up to four hops; a token that names no readable file stays literal, which is what leaves an `@mention` or an email address alone. `CLAUDE.md` and `CLAUDE.local.md` are the two names this plugin takes over: their sections are removed from the host's own workspace-instruction messages, so those files load here, under Claude Code's rules, exactly once. `AGENTS.md` is untouched and keeps loading from the host.
 
+### Write Claude auto memory
+
+**加载记忆** must be on before **写入记忆** can be enabled. Once enabled, the model can call `claude_memory_write`. A call creates a new `<name>.md` topic file under the current project's `~/.claude/projects/<repository>/memory/` and appends a pointer to `MEMORY.md`. The directory follows this plugin's `claudeHome`, `projectRootMarkers`, and `autoMemoryDirectory` settings. Existing topics are never overwritten; names accept only lowercase letters, digits, and hyphens, and writes are refused once the index reaches Claude's loading limit. Turning off **加载记忆** also disables the write tool. The plugin does not summarize or delete old memories automatically.
+
 ### Load scoped rules
 
 **加载规则** folds `.claude/rules/**` for the project and `~/.claude/rules/**` for the user. A rule with no `paths:` in its frontmatter is always-on and folds at session start, like `CLAUDE.md`. A rule with a `paths:` glob list is path-scoped: it folds into the request that follows a `read` of a file matching one of its globs, matched against the project-root-relative path, and at most once per session. Reading is the only trigger — `write` and `edit` never activate a scoped rule.
@@ -56,6 +60,7 @@ The plugin adds one section to the settings page: **设置 → Claude 兼容**. 
 |---|---|
 | **加载技能** | on — `.claude/skills/**` and `~/.claude/skills/**` are in the catalog |
 | **加载记忆** | on — the memory files and the auto-memory index fold at session start |
+| **写入记忆** | off — requires **加载记忆**; disabling loading also withdraws `claude_memory_write` |
 | **加载规则** | on — always-on rules fold at session start, a `paths:` rule after a matching read |
 
 ## Notes and caveats
@@ -65,7 +70,7 @@ The plugin adds one section to the settings page: **设置 → Claude 兼容**. 
 - **A repo with `CLAUDE.md` and no `AGENTS.md` keeps an intro-only reminder.** The host loader's message is kept — minus the sections this plugin owns — so it stays a visible baseline and is not recomposed on every step, which leaves its one-line "the following workspace instructions may be relevant" intro with nothing after it.
 - **Nested memory triggers on `read` only.** A nested `CLAUDE.md` folds when the `read` tool touches a file in its directory; `write` and `edit` do not trigger it.
 - **Path-scoped rules trigger on `read` only.** `write` and `edit` do not activate them.
-- **Auto memory is read, never written.** `MEMORY.md` and its topic files reach the model as context, but the harness does not append new memories to them the way Claude Code does.
+- **Writing happens only on a model tool call.** The plugin does not organize, overwrite, or delete memories on its own. A mid-session index write is not automatically folded again in that session.
 - **Claude Code's `settings.json` is not consulted.** `autoMemoryDirectory` there is ignored; set the plugin's own `autoMemoryDirectory` field instead.
 - **Imports are not approval-gated.** Claude Code asks before a project memory file imports a path outside the working directory; this plugin resolves such an import directly.
 - **`AGENTS.md` is not the loader's fallback.** Claude Code's default reads `AGENTS.md` only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working directory or above it. Here the host's workspace-instruction loader keeps reading `AGENTS.md` on its own terms, alongside the `CLAUDE.md` this plugin loads.

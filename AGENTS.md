@@ -27,7 +27,7 @@ MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见下。
 
 ## 配置
 
-每个字段都有可用的默认值,下表用于覆盖其中某一项。`skills`、`rules`、`memory` 同时各有设置页开关,所以用户不动组合就能关掉其中一块;组合想换起点,就在行的 `config:` 下写同样的字段,schema 默认值在它之下。
+每个字段都有可用的默认值,下表用于覆盖其中某一项。`skills`、`rules`、`memory`、`memoryWrite` 各有设置页开关,其中写入必须先开启加载记忆;组合想换起点,就在行的 `config:` 下写同样的字段,schema 默认值在它之下。
 
 | 字段 | 默认 | 含义 |
 |---|---|---|
@@ -37,6 +37,7 @@ MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见下。
 | `skills` | `true` | 把 `.claude/skills` 根加进会话技能目录 |
 | `includeProjectRoot` / `includeGlobalRoot` | `true` | 扫描项目 / 用户的 `.claude/skills` 根 |
 | `memory` | `true` | 把 Claude Code 记忆文件折进请求 |
+| `memoryWrite` | `false` | `memory` 开启后才允许模型调用 `claude_memory_write` 写入 Claude 项目自动记忆目录 |
 | `includeProjectRule` / `includeGlobalRule` | `true` | 加载项目 / 用户的 `CLAUDE.md` 记忆文件 |
 | `includeManagedMemory` | `true` | 加载机器级托管策略记忆文件 |
 | `managedMemoryPath` | 各平台策略路径 | 要加载的托管策略记忆文件 |
@@ -60,7 +61,7 @@ MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见下。
     rules: false
 ```
 
-三个开关是插件行 Config 上的 `Volatile` 字段:设置页写入的值不经过重挂载就到达运行中的插件,contributor 每次请求现读它们。
+四个开关是插件行 Config 上的 `Volatile` 字段:设置页写入的值不经过重挂载就到达运行中的插件,contributor 每次请求现读它们;写入工具在 Loader 的配置变更事件中同步注册状态。
 
 ## 验证(specs)
 
@@ -75,7 +76,7 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
 React,所以装载 `dsh-agent-loop` 的真实组合用例与组件渲染用例都能跑;自足子集只用本包 `node_modules`
 里已装的包,且只收 `*.spec.ts`。`tests/README.md` 列出两者各自覆盖的套件。
 
-设置页三个开关(技能 / 记忆 / 规则)各自加载什么、何时注入,由 `src/client/locales.ts` 的词条与
+设置页四个开关(技能 / 记忆加载 / 记忆写入 / 规则)各自做什么、何时生效,由 `src/client/locales.ts` 的词条与
 `ContextInjectionSection.tsx` 的 `COMPAT_SWITCHES` 共同决定;**加了能力就要同步这两处**,
 否则 UI 会继续按老清单描述。
 
@@ -143,7 +144,7 @@ MCP 服务器管理(行的增删改、加载模式、工具过滤、「MCP 管�
 
 两边的关系:
 
-- **设置命名空间分开**:`context-injection`(本仓:`skills` / `memory` / `rules`)与
+- **设置命名空间分开**:`context-injection`(本仓:`skills` / `memory` / `memoryWrite` / `rules`)与
   `mcp-manager`(那边:`loading` / `descriptions` / `tools`)。settings 服务一个命名空间只有一个 registrant,
   共用做不到,所以拆分时把 MCP 三项搬到了新命名空间并去掉了 `mcp` 前缀。
 - **设置页两个独立区块**:本仓 order 13「Claude 兼容」,那边 order 14「MCP 管理」。
@@ -203,7 +204,7 @@ client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
 
 生效语义分两半。**host 半边是进程内模块**:重建 `lib/` 不会替换正在运行的代码,必须重启宿主才会加载新产物。**client 半边按内容 revision 提供**:刷新页面就能拿到新 bundle,`HANDOFF_ID` 就是这个 revision 的标识,改动 client 后必须 bump 它或强刷浏览器,否则浏览器一直跑旧 bundle。
 
-三个设置页开关是插件行的 `Volatile` 字段,所以它们不属于上面这条重启规则:设置页写入的值不经过重挂载就到达运行中的插件。
+四个设置页开关是插件行的 `Volatile` 字段,所以它们不属于上面这条重启规则:设置页写入的值不经过重挂载就到达运行中的插件。
 
 ## 发版(Release)
 
@@ -231,7 +232,7 @@ client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
 
 - **仓库根就是包,不放进 `packages/*`** —— `dsh plugin add <git-url>` 取的是仓库根,放进子目录会被装成错误的东西(见「目录」)。
 - **`CLAUDE.md`/`CLAUDE.local.md` 由本插件独占,而不是让两个加载器并存** —— 这两个名字 harness 的 `agent-instructions` 也会读,但规则不同(不展开 `@import`、1 MiB 上限、同目录去重);接管把这两个名字收敛到 Claude Code 的规则上,代价是剥段落依赖对方的消息格式(见「易崩清单」第 6 条)。
-- **三个开关做成插件行的 `Volatile` 字段,而不是另开一个 settings 命名空间** —— settings 服务一个命名空间只有一个 registrant(见「MCP 管理已拆分」),放在行 Config 上则设置页写入不需要重挂载。
+- **四个开关做成插件行的 `Volatile` 字段,而不是另开一个 settings 命名空间** —— settings 服务一个命名空间只有一个 registrant(见「MCP 管理已拆分」),放在行 Config 上则设置页写入不需要重挂载。
 - **消息源一律用通用 `plugin` kind,不自造 kind** —— Session 格式迁移只认发布版能产出的那张固定 kind 表,自造 kind 会让历史会话打不开;harness 明确否决过"让插件注册迁移"的方案(见「易崩清单」第 5 条)。
 
 ## 易崩清单

@@ -1,7 +1,7 @@
 /**
  * Controller bridging the Host `claude-compat` settings namespace onto the
- * Harness-compat section snapshot. Reads the three compatibility switches —
- * skills, memory, and scoped rules — and flips one at a time through the
+ * Harness-compat section snapshot. Reads the compatibility switches for
+ * skills, memory loading and writing, and scoped rules, then flips one through the
  * configuration form.
  *
  * @module @guowenzhang/dsh-claude-compat/client/settings-controller
@@ -13,14 +13,15 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 /** Settings namespace registered Host-side by @guowenzhang/dsh-claude-compat: the Loader row id. */
 export const CONTEXT_INJECTION_NS = 'claude-compat'
 
-/** The three compatibility switches. */
+/** The compatibility switches. */
 export interface ContextInjectionFlags {
   skills: boolean
   memory: boolean
+  memoryWrite: boolean
   rules: boolean
 }
 
-/** One independently switchable part of the compatibility surface. */
+/** One switchable part of the compatibility surface. */
 export type InjectionSwitch = keyof ContextInjectionFlags
 
 /** Snapshot the section renders. */
@@ -31,6 +32,7 @@ export interface ContextInjectionSectionState {
   writable: boolean
   skills: boolean
   memory: boolean
+  memoryWrite: boolean
   rules: boolean
 }
 
@@ -75,6 +77,15 @@ export class ContextInjectionController {
     if (snapshot.status !== 'ready' || !snapshot.writable) return
     const value = snapshot.value?.[name]
     if (value === undefined) return
+    if (name === 'memoryWrite' && !snapshot.value?.memory) return
+    if (name === 'memory' && value && snapshot.value?.memoryWrite) {
+      // Commit both fields in one Host mutation, so no saved state violates the dependency.
+      void this.scope.mutate([
+        { op: 'set', path: ['memoryWrite'], value: false },
+        { op: 'set', path: ['memory'], value: false },
+      ])
+      return
+    }
     void this.scope.set(name, !value)
   }
 
@@ -85,6 +96,7 @@ export class ContextInjectionController {
       writable: snapshot.writable,
       skills: snapshot.value?.skills ?? true,
       memory: snapshot.value?.memory ?? true,
+      memoryWrite: (snapshot.value?.memory ?? true) && (snapshot.value?.memoryWrite ?? false),
       rules: snapshot.value?.rules ?? true,
     }
   }

@@ -14,13 +14,14 @@ import { apply, Config, CONTEXT_INJECTION_NAMESPACE, inject, name } from '../src
 import { contextInjectionFlags } from '../src/context-injection.ts'
 import { instructionsSource, isInstructionsSource, PLUGIN_ID } from '../src/sources.ts'
 
-/** The three live switches a resolved Config carries. */
-function config(over: { skills?: boolean; rules?: boolean; memory?: boolean } = {}): Config {
-  const value = { skills: true, rules: true, memory: true, ...over }
+/** The live switches a resolved Config carries. */
+function config(over: { skills?: boolean; rules?: boolean; memory?: boolean; memoryWrite?: boolean } = {}): Config {
+  const value = { skills: true, rules: true, memory: true, memoryWrite: false, ...over }
   return {
     skills: { get: () => value.skills },
     rules: { get: () => value.rules },
     memory: { get: () => value.memory },
+    memoryWrite: { get: () => value.memoryWrite },
   } as Config
 }
 
@@ -218,7 +219,9 @@ describe('plugin composition', () => {
     const state = { providers: 0 }
     const ctx = {
       skills: { registerProvider: () => { state.providers += 1; return () => {} } },
+      tools: { register: () => () => {} },
       on: (event: string) => { listeners.push(event); return () => {} },
+      effect: () => {},
       get: () => undefined,
     } as unknown as Context
     return {
@@ -235,20 +238,20 @@ describe('plugin composition', () => {
     expect(stub.providers).toBe(1)
     // The memory contributor and the scoped-rule contributor each follow the
     // pre-step waterfall and each watch reads.
-    expect(stub.listeners).toEqual(['agent/pre-step', 'tools/result', 'agent/pre-step', 'tools/result'])
+    expect(stub.listeners).toEqual(['loader/volatile-update', 'agent/pre-step', 'tools/result', 'agent/pre-step', 'tools/result'])
   })
 
-  it('publishes the three switches as live fields of its own row', () => {
+  it('publishes the switches as live fields of its own row', () => {
     expect(CONTEXT_INJECTION_NAMESPACE).toBe(name)
-    for (const field of ['skills', 'rules', 'memory'] as const) {
+    for (const field of ['skills', 'rules', 'memory', 'memoryWrite'] as const) {
       expect(Config.dict?.[field]?.meta.volatile).toBe(true)
     }
   })
 
-  it('registers nothing beyond the skills service it declares', () => {
+  it('declares the skill and tool services it uses', () => {
     // The retired Codex, system-prompt, and `/btw` contributions must not come
     // back as hidden injections.
-    expect(inject).toEqual(['skills'])
+    expect(inject).toEqual(['skills', 'tools'])
   })
 })
 
@@ -278,24 +281,31 @@ describe('instructionsSource', () => {
 })
 
 describe('contextInjectionFlags', () => {
-  it('defaults all three switches on', () => {
-    expect(contextInjectionFlags(config())()).toEqual({ skills: true, rules: true, memory: true })
+  it('defaults loading on and writing off', () => {
+    expect(contextInjectionFlags(config())()).toEqual({ skills: true, rules: true, memory: true, memoryWrite: false })
   })
 
   it('carries each composed switch through', () => {
     const flags = contextInjectionFlags(config({ skills: false, memory: false }))
-    expect(flags()).toEqual({ skills: false, rules: true, memory: false })
+    expect(flags()).toEqual({ skills: false, rules: true, memory: false, memoryWrite: false })
+  })
+
+  it('requires memory loading before writing is effective', () => {
+    expect(contextInjectionFlags(config({ memory: false, memoryWrite: true }))().memoryWrite).toBe(false)
+    expect(contextInjectionFlags(config({ memory: true, memoryWrite: true }))().memoryWrite).toBe(true)
   })
 
   it('observes a value committed after the reader was built', () => {
-    const live = { skills: false, rules: true, memory: true }
+    const live = { skills: false, rules: true, memory: true, memoryWrite: false }
     const flags = contextInjectionFlags({
       skills: { get: () => live.skills },
       rules: { get: () => live.rules },
       memory: { get: () => live.memory },
+      memoryWrite: { get: () => live.memoryWrite },
     } as Config)
     live.skills = true
     live.memory = false
-    expect(flags()).toEqual({ skills: true, rules: true, memory: false })
+    live.memoryWrite = true
+    expect(flags()).toEqual({ skills: true, rules: true, memory: false, memoryWrite: false })
   })
 })

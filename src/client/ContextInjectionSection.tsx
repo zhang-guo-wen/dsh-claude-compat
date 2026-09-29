@@ -1,8 +1,8 @@
 /**
  * Context-injection settings section: the Harness-compat page.
  *
- * It holds one switch per part of the compatibility surface — skills, memory,
- * and scoped rules — and lists under each what that switch loads and when, so
+ * It holds one switch per part of the compatibility surface — skills, memory
+ * loading and writing, and scoped rules — and lists under each what it does, so
  * the page states the compatibility surface itself instead of pointing at the
  * README.
  *
@@ -42,7 +42,7 @@ export interface CompatSwitch {
   entries: readonly CompatEntry[]
 }
 
-/** The three switches, in the order the page presents them. */
+/** The switches, in the order the page presents them. */
 export const COMPAT_SWITCHES: readonly CompatSwitch[] = [
   {
     name: 'skills',
@@ -60,6 +60,12 @@ export const COMPAT_SWITCHES: readonly CompatSwitch[] = [
       { title: 'memory.nested', detail: 'memory.nested.detail' },
       { title: 'memory.imports', detail: 'memory.imports.detail' },
     ],
+  },
+  {
+    name: 'memoryWrite',
+    label: 'memoryWrite',
+    desc: 'memoryWrite.desc',
+    entries: [{ title: 'memoryWrite.files', detail: 'memoryWrite.files.detail' }],
   },
   {
     name: 'rules',
@@ -89,11 +95,11 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
                   <span className={css.switchDesc}>{t(entry.desc)}</span>
                 </span>
                 <Switch
-                  checked={state[entry.name]}
+                  checked={entry.name === 'memoryWrite' ? state.memory && state.memoryWrite : state[entry.name]}
                   onChange={() => { toggle(entry.name) }}
                   label={t(entry.label)}
-                  disabled={disabled}
-                  title={disabled ? t('unavailable') : undefined}
+                  disabled={disabled || (entry.name === 'memoryWrite' && !state.memory)}
+                  title={disabled ? t('unavailable') : entry.name === 'memoryWrite' && !state.memory ? t('memoryWrite.requiresMemory') : undefined}
                 />
               </div>
               <ul className={css.compatList}>

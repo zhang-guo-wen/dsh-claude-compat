@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   COMPAT_SWITCHES,
   ContextInjectionSection,
   type ContextInjectionSectionProps,
 } from '../src/client/ContextInjectionSection.tsx'
 import { en, zh, type ContextInjectionSectionKey } from '../src/client/locales.ts'
-import type { ContextInjectionSectionState } from '../src/client/settings-controller.ts'
+import { ContextInjectionController, type ContextInjectionFlags, type ContextInjectionSectionState } from '../src/client/settings-controller.ts'
 
 const READY: ContextInjectionSectionState = {
   available: true,
   writable: true,
   skills: true,
   memory: true,
+  memoryWrite: false,
   rules: true,
 }
 
@@ -42,7 +44,7 @@ describe('context-injection section switches', () => {
   it('gives each part of the surface its own switch', () => {
     const html = render('zh')
     expect(html.match(/role="switch"/g)).toHaveLength(COMPAT_SWITCHES.length)
-    expect(COMPAT_SWITCHES.map(entry => entry.name)).toEqual(['skills', 'memory', 'rules'])
+    expect(COMPAT_SWITCHES.map(entry => entry.name)).toEqual(['skills', 'memory', 'memoryWrite', 'rules'])
   })
 
   it('names what each switch loads, in both languages', () => {
@@ -73,8 +75,37 @@ describe('context-injection section switches', () => {
   it('reflects each switch independently', () => {
     expect(render('zh', { memory: false })).toContain('aria-checked="false"')
     const html = render('zh', { memory: false })
-    expect(html.match(/aria-checked="false"/g)).toHaveLength(1)
+    expect(html.match(/aria-checked="false"/g)).toHaveLength(2)
     expect(html.match(/aria-checked="true"/g)).toHaveLength(2)
+  })
+
+  it('disables writing until memory loading is on', () => {
+    const html = render('zh', { memory: false, memoryWrite: true })
+    expect(html).toContain(escaped(zh['memoryWrite.requiresMemory']))
+    expect(html.match(/disabled=""/g)?.length).toBe(1)
+  })
+
+  it('clears writing atomically when memory loading is turned off', () => {
+    const writes: unknown[] = []
+    const value: ContextInjectionFlags = { skills: true, memory: true, memoryWrite: true, rules: true }
+    const scope = {
+      getSnapshot: () => ({ status: 'ready', writable: true, value }),
+      subscribe: () => () => {},
+      set: (field: string, next: boolean) => { writes.push({ field, next }); return Promise.resolve(true) },
+      mutate: (ops: unknown[]) => { writes.push(ops); return Promise.resolve(true) },
+    } as unknown as ConfigForm<ContextInjectionFlags>
+    const controller = new ContextInjectionController(scope)
+    controller.inject().toggle('memory')
+    expect(writes).toEqual([[
+      { op: 'set', path: ['memoryWrite'], value: false },
+      { op: 'set', path: ['memory'], value: false },
+    ]])
+    writes.length = 0
+    value.memory = false
+    value.memoryWrite = false
+    controller.inject().toggle('memoryWrite')
+    expect(writes).toEqual([])
+    controller.dispose()
   })
 
   it('renders the unavailable notice without any switch', () => {

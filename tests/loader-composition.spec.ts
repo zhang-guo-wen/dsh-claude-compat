@@ -7,6 +7,8 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as ClaudeCompat from '../src/index.ts'
 
 let root: string | undefined
@@ -30,6 +32,8 @@ async function loadYaml(lines: readonly string[]): Promise<Context> {
   context.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-skill', SkillRegistry],
+    ['@deepseek-ai/dsh-tools', ToolRuntime],
+    ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
     ['@deepseek-ai/dsh-claude-compat', ClaudeCompat],
   ])
   context.loader.internal = {
@@ -61,6 +65,8 @@ describe('real Loader composition', () => {
 
       const loaded = await loadYaml([
         "- name: '@deepseek-ai/dsh-skill'",
+        "- name: '@deepseek-ai/dsh-system-prompt'",
+        "- name: '@deepseek-ai/dsh-tools'",
         "- name: '@deepseek-ai/dsh-claude-compat'",
         '  config:',
         '    claudeHome: ' + JSON.stringify(claudeHome),

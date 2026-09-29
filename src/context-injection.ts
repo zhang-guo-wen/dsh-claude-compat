@@ -1,7 +1,6 @@
 /**
- * Context-injection user settings: the three switches that decide which part of
- * the Claude Code compatibility surface this plugin applies — the skill
- * catalog, the memory files, and the scoped rules.
+ * Context-injection user settings: switches for skills, memory loading and
+ * writing, and scoped rules. Writing requires memory loading.
  *
  * The switches are this plugin's Loader row Config, so the profile entry id
  * (`claude-compat`) is the namespace the settings page addresses and the schema
@@ -21,8 +20,8 @@ import z from '@deepseek-ai/schemastery'
 /** Settings namespace owned by this plugin: its Loader row id. */
 export const CONTEXT_INJECTION_NAMESPACE = 'claude-compat'
 
-/** One independently switchable part of the compatibility surface. */
-export type InjectionSwitch = 'skills' | 'rules' | 'memory'
+/** One switchable part of the compatibility surface. */
+export type InjectionSwitch = 'skills' | 'rules' | 'memory' | 'memoryWrite'
 
 /** The injection preferences this plugin publishes as live settings fields. */
 export interface ContextInjectionFlags {
@@ -32,6 +31,8 @@ export interface ContextInjectionFlags {
   rules: Volatile<boolean>
   /** Whether the Claude Code memory files are folded into the request. */
   memory: Volatile<boolean>
+  /** Whether the model may write Claude Code's auto-memory files. */
+  memoryWrite: Volatile<boolean>
 }
 
 /** Schema served to settings clients for the injection preferences.
@@ -40,6 +41,7 @@ export const CONTEXT_INJECTION_SCHEMA = z.object({
   skills: z.boolean().default(true).volatile(),
   rules: z.boolean().default(true).volatile(),
   memory: z.boolean().default(true).volatile(),
+  memoryWrite: z.boolean().default(false).volatile(),
 })
 
 /** Composition-layer defaults accepted under the row's `config:`. */
@@ -47,23 +49,25 @@ export interface ContextInjectionConfig {
   skills?: boolean
   rules?: boolean
   memory?: boolean
+  memoryWrite?: boolean
 }
 
-/** The three switches as plain values. */
+/** The switches as plain values. */
 export interface InjectionFlags {
   skills: boolean
   rules: boolean
   memory: boolean
+  memoryWrite: boolean
 }
 
 /** A live {@link InjectionFlags} reader (detached snapshots). */
 export type InjectionFlagsSource = () => InjectionFlags
 
 /**
- * Read the three switches as plain values.
+ * Read the switches as plain values.
  *
- * The contributors call the returned thunk per request, so a committed change
- * needs no listener and no re-registration.
+ * Readers call the thunk when needed; the write tool also uses the Loader's
+ * volatile-update event to change its registry presence immediately.
  * @param config - the plugin's resolved configuration.
  * @returns a thunk returning the switches as they stand at call time.
  */
@@ -72,5 +76,6 @@ export function contextInjectionFlags(config: ContextInjectionFlags): InjectionF
     skills: config.skills.get(),
     rules: config.rules.get(),
     memory: config.memory.get(),
+    memoryWrite: config.memory.get() && config.memoryWrite.get(),
   })
 }

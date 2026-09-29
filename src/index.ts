@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-skill'
 import { ClaudeCodeSkillProvider, type Config as ProviderConfig } from './provider.ts'
 import { claudeInstructionListener, type InstructionConfig } from './instructions.ts'
 import { claudeRulesListener, type RulesConfig } from './rules.ts'
+import { registerClaudeMemoryWriteTool } from './memory-write.ts'
 import {
   contextInjectionFlags,
   CONTEXT_INJECTION_NAMESPACE,
@@ -37,10 +38,10 @@ export type {
 export const name = 'claude-compat'
 
 /** Services required by this plugin; the settings page is served from the row Config. */
-export const inject = ['skills']
+export const inject = ['skills', 'tools']
 
 /** Config forwarded to the provider, the memory contributor, the rule contributor, and the settings page.
- * The three switches are the row's live fields; a composition sets their defaults under `config:`. */
+ * The switches are the row's live fields; a composition sets their defaults under `config:`. */
 export interface Config extends ProviderConfig, InstructionConfig, RulesConfig {
   /** Whether `.claude/skills` roots join the session skill catalog. */
   skills: Volatile<boolean>
@@ -48,6 +49,8 @@ export interface Config extends ProviderConfig, InstructionConfig, RulesConfig {
   rules: Volatile<boolean>
   /** Whether the Claude Code memory files are folded into the request. */
   memory: Volatile<boolean>
+  /** Whether the model may write Claude Code's auto-memory files. */
+  memoryWrite: Volatile<boolean>
 }
 
 export const Config = z.object({
@@ -97,12 +100,13 @@ function pickDefined<T extends object, K extends keyof T>(
 
 /**
  * Register the Claude Code skill provider and the memory and scoped-rule
- * contributors. Each of the three follows its own live settings switch.
+ * contributors and the opt-in memory write tool, each under its own live switch.
  * @param ctx - plugin context.
  * @param config - the row's resolved configuration.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const flags = contextInjectionFlags(config)
+  registerClaudeMemoryWriteTool(ctx, config, () => flags().memoryWrite)
   ctx.skills.registerProvider(control => new ClaudeCodeSkillProvider(ctx, control, { ...config, enabled: () => flags().skills }))
   claudeInstructionListener(ctx, pickDefined(config, [
     'claudeHome',

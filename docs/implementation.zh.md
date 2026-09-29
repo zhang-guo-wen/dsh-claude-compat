@@ -1,5 +1,5 @@
 ---
-description: "DeepSeek Harness 的 Claude Code 兼容：.claude/skills 发现、CLAUDE.md 记忆文件与作用域规则。"
+description: "DeepSeek Harness 的 Claude Code 兼容：技能、记忆读写与作用域规则。"
 kind: "package-reference"
 ---
 
@@ -26,11 +26,12 @@ Claude Code 把技能放在 `<root>/.claude/skills/<name>/SKILL.md`，把记忆�
 <a id="use-this-package"></a>
 ## 使用本包
 
-与技能注册表一起挂载；需要 `ctx.skills`。用 profile 的 `patch` 或预设组合像其他插件一样插入即可。
+与技能和工具注册表一起挂载；需要 `ctx.skills` 与 `ctx.tools`。用 profile 的 `patch` 或预设组合像其他插件一样插入即可。
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
-- name: '@deepseek-ai/dsh-claude-compat'
+- name: '@deepseek-ai/dsh-tools'
+- name: '@guowenzhang/dsh-claude-compat'
 ```
 
 | 字段 | 默认 | 含义 |
@@ -42,6 +43,7 @@ Claude Code 把技能放在 `<root>/.claude/skills/<name>/SKILL.md`，把记忆�
 | `includeProjectRoot` | `true` | 扫描项目 `.claude/skills` 根 |
 | `includeGlobalRoot` | `true` | 扫描用户 `~/.claude/skills` 根 |
 | `memory` | `true` | 把 Claude Code 记忆文件折进请求 |
+| `memoryWrite` | `false` | `memory` 开启时允许模型在 Claude Code 的自动记忆目录创建话题文件与索引指针 |
 | `includeProjectRule` | `true` | 加载项目 `CLAUDE.md` 链 |
 | `includeGlobalRule` | `true` | 加载用户 `~/.claude/CLAUDE.md` |
 | `includeNestedMemory` | `true` | 读到某目录下的文件后加载该目录的记忆文件 |
@@ -59,7 +61,7 @@ Claude Code 把技能放在 `<root>/.claude/skills/<name>/SKILL.md`，把记忆�
 | `maxRuleSourceBytes` | `1048576` | 单个规则文件的最大 UTF-8 字节数 |
 | `maxRuleRenderBytes` | `262144` | 单批规则渲染的最大 UTF-8 字节数 |
 
-`skills`、`memory`、`rules` 各有设置页开关，用户可以在不动组合的前提下关掉其中一块。
+`skills`、`memory`、`memoryWrite`、`rules` 各有设置页开关。写入依赖加载；关闭加载时，设置页会在同一次写入中关闭写入并撤销工具。
 
 ### 技能
 
@@ -86,7 +88,7 @@ Claude Code 的记忆文件由宽到具体加载，本包保持同样的顺序�
 
 `CLAUDE.md` 与 `CLAUDE.local.md` 是 Harness 自身 `agent-instructions` 也认领的两个名字，但规则不同：它从同样的目录读这两个名字，但不展开 `@path` 导入、单文件上限是 1 MiB 而不是 4 MiB、会在同目录内按内容去重，而且永远不读托管策略、用户主目录、`<dir>/.claude/CLAUDE.md` 与自动记忆索引。`takeOverClaudeMd`（默认 true）负责化解重叠：这两个名字由本包加载，每个进入步骤的 `agent-instructions` 消息都会去掉其中的 `CLAUDE.md`/`CLAUDE.local.md` 段落。消息本身保留 —— 那个加载器靠消息身份确认基线，被改写过的消息仍算可见基线，因此不会每一步重新组装。`AGENTS.md` 与 `AGENTS.local.md` 继续由那个加载器按自己的规则加载。
 
-`<repository>` 是 git 仓库根 —— 被解析出来的 `.git` 文件会把链接式 worktree 还原到它 —— 并把 `[A-Za-z0-9]` 之外的每个字符替换为 `-`，与 Claude Code 写在 `projects/` 下的目录名一致。只读索引；它旁边的主题文件留在磁盘上，由模型按需读取。
+`<repository>` 是 git 仓库根 —— 被解析出来的 `.git` 文件会把链接式 worktree 还原到它 —— 并把 `[A-Za-z0-9]` 之外的每个字符替换为 `-`，与 Claude Code 写在 `projects/` 下的目录名一致。索引在会话开始时折叠；`memory` 与 `memoryWrite` 同时开启时，`claude_memory_write` 可以创建新话题文件并向索引追加指针。关闭加载会撤销写入工具。
 
 每个被加载的文件都套用两条预处理规则。`@path` 导入就地展开：相对路径相对导入它的文件解析，`~/` 相对进程用户主目录解析，最多 `maxImportDepth` 跳，跳过行内代码与围栏代码块，且每个文件每批至多展开一次，因此重复或循环导入会保持字面量。解析不到可读文件的 token 同样保持字面量 —— 这正是 `@提及` 与邮箱地址不被改动的原因。整行级 HTML 注释会被移除，而行内注释、代码围栏内的注释与未闭合的注释都会保留。
 
@@ -118,6 +120,7 @@ Claude Code 的记忆文件由宽到具体加载，本包保持同样的顺序�
 | [`src/frontmatter.ts`](src/frontmatter.ts) | 技能与规则共用的 YAML frontmatter 解析 |
 | [`src/file-text.ts`](src/file-text.ts) | 各加载器共用的 Claude 主目录解析、项目根上溯与文件读取 |
 | [`src/memory.ts`](src/memory.ts) | 记忆文件位置、`@path` 导入、注释剥离与自动记忆索引 |
+| [`src/memory-write.ts`](src/memory-write.ts) | 安全创建话题文件、更新索引与实时写入工具开关 |
 | [`src/instructions.ts`](src/instructions.ts) | 记忆监听器：会话起始批次、每个读到目录的记忆，以及从工作区加载器消息中剥掉自有名字 |
 | [`src/render.ts`](src/render.ts) | 在单一字节预算下的 `Instructions from:` 渲染 |
 | [`src/rules.ts`](src/rules.ts) | `.claude/rules/**` 发现、`paths:` 匹配与读触发折叠 |
@@ -183,7 +186,7 @@ Instructions from: .claude/rules/api.md
 - **接管依赖工作区加载器的消息格式** — 剥离自有段落匹配的是该加载器写出的 `Instructions from:` / `Additional instructions from:` / `Updated instructions from:` / `Instructions removed:` 标题。格式一变，两个加载器就会各注入一份；`tests/rules-composition.spec.ts` 的组合用例会捕获这种情况。
 - **只有 `CLAUDE.md` 的仓库会留下一条空引导语** — 加载器那条消息被保留，以便它仍是可见基线、不会每一步重新组装；代价是那句引导语下面没有内容。
 - **嵌套记忆与路径作用域规则仅读触发** — 与 Claude Code 一致，两者都在 `read` 工具触碰匹配文件时折叠；`write`/`edit` 不触发，因此作用域一个文件却撰写该文件的规则或记忆可能不激活。
-- **自动记忆在这里是只读的** — harness 会注入 `MEMORY.md`，但从不往里追加，所以会话中的新认知不会进入 Claude Code 自己的存储。
+- **自动记忆写入需主动开启** — 开启后，模型可通过 `claude_memory_write` 保存新话题与索引指针。现有话题不会被覆盖，插件也不会自行整理记忆。
 - **不读 Claude Code 的 `settings.json`** — 其中的 `autoMemoryDirectory` 被忽略；覆盖入口是本插件自己的 `autoMemoryDirectory` 字段。
 - **导入不做审批闸门** — Claude Code 会在项目记忆文件导入工作目录之外的路径前询问；本包直接解析这类导入。
 - **用户级路径规则同样按读触发折叠** — 参考实现静默忽略 `~/.claude/rules` 路径规则；本包对项目与用户两棵树都折叠（各自至多一次）。

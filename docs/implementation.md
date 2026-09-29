@@ -1,5 +1,5 @@
 ---
-description: "Claude Code compatibility for the DeepSeek Harness: .claude/skills discovery, CLAUDE.md memory files, and scoped rules."
+description: "Claude Code compatibility for the DeepSeek Harness: skills, memory loading and writing, and scoped rules."
 kind: "package-reference"
 ---
 
@@ -27,11 +27,12 @@ Claude Code keeps skills as `<root>/.claude/skills/<name>/SKILL.md`, memory in `
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the plugin alongside the skill registry; it requires `ctx.skills`. A profile `patch` or a preset composition inserts it like any other plugin.
+Mount the plugin alongside the skill and tool registries; it requires `ctx.skills` and `ctx.tools`. A profile `patch` or a preset composition inserts it like any other plugin.
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
-- name: '@deepseek-ai/dsh-claude-compat'
+- name: '@deepseek-ai/dsh-tools'
+- name: '@guowenzhang/dsh-claude-compat'
 ```
 
 | Field | Default | Meaning |
@@ -43,6 +44,7 @@ Mount the plugin alongside the skill registry; it requires `ctx.skills`. A profi
 | `includeProjectRoot` | `true` | Scan the project `.claude/skills` root |
 | `includeGlobalRoot` | `true` | Scan the user `~/.claude/skills` root |
 | `memory` | `true` | Fold the Claude Code memory files into the request |
+| `memoryWrite` | `false` | Let the model create topic files and index pointers in Claude Code's auto-memory directory when `memory` is on |
 | `includeProjectRule` | `true` | Load the project `CLAUDE.md` chain |
 | `includeGlobalRule` | `true` | Load the user `~/.claude/CLAUDE.md` |
 | `includeNestedMemory` | `true` | Load a directory's memory files after a read under it |
@@ -60,8 +62,7 @@ Mount the plugin alongside the skill registry; it requires `ctx.skills`. A profi
 | `maxRuleSourceBytes` | `1048576` | Maximum UTF-8 bytes read from one rule file |
 | `maxRuleRenderBytes` | `262144` | Maximum UTF-8 bytes rendered in one rules batch |
 
-`skills`, `memory`, and `rules` each have a settings-page switch, so a user can turn one part of the surface off
-without touching the composition.
+`skills`, `memory`, `memoryWrite`, and `rules` each have a settings-page switch. Writing requires loading; turning loading off clears writing in one settings mutation and withdraws the tool.
 
 ### Skills
 
@@ -88,7 +89,7 @@ Each file renders as an `Instructions from: <displayPath>` block. The first requ
 
 `CLAUDE.md` and `CLAUDE.local.md` are the two names the Harness's own `agent-instructions` loader also claims, under different rules: it reads them from the same directories but expands no `@path` imports, caps a file at 1 MiB rather than 4 MiB, deduplicates same-directory content, and never reads the managed policy, the user home, `<dir>/.claude/CLAUDE.md`, or the auto-memory index. `takeOverClaudeMd` (default true) resolves the overlap: this package loads the two names, and every `agent-instructions` message entering a step has its `CLAUDE.md`/`CLAUDE.local.md` sections removed. The message itself is kept, because that loader confirms its baseline by message identity — a rewritten message stays a visible baseline instead of being re-composed. `AGENTS.md` and `AGENTS.local.md` keep loading from that loader, on its own terms.
 
-`<repository>` is the git repository root — a `.git` file resolves a linked worktree back to it — with every character outside `[A-Za-z0-9]` replaced by `-`, matching the directory names Claude Code writes under `projects/`. Only the index is read; the topic files beside it stay on disk for the model to read on demand.
+`<repository>` is the git repository root — a `.git` file resolves a linked worktree back to it — with every character outside `[A-Za-z0-9]` replaced by `-`, matching the directory names Claude Code writes under `projects/`. The index is folded at session start. When both `memory` and `memoryWrite` are on, `claude_memory_write` creates a new topic file and appends its pointer to the index. Turning off loading withdraws the write tool.
 
 Two preprocessing rules apply to every loaded file. `@path` imports expand in place: relative to the importing file, `~/` against the process user home, at most `maxImportDepth` hops, skipping inline code spans and fenced code blocks, and expanding each file at most once per batch so a repeated or circular import stays literal. A token that names no readable file stays literal too, which is what keeps an `@mention` or an email address untouched. Block-level HTML comments are removed, while an inline comment, a comment inside a code fence, and an unterminated comment are kept.
 
@@ -120,6 +121,7 @@ The skill provider follows the `skill-filesystem` model: discovery parses frontm
 | [`src/frontmatter.ts`](src/frontmatter.ts) | Shared YAML frontmatter parsing used by skills and rules |
 | [`src/file-text.ts`](src/file-text.ts) | Claude home resolution, project-root walk, and file reads shared by every loader |
 | [`src/memory.ts`](src/memory.ts) | Memory-file locations, `@path` imports, comment stripping, and the auto-memory index |
+| [`src/memory-write.ts`](src/memory-write.ts) | Guarded topic creation, index updates, and the live write-tool switch |
 | [`src/instructions.ts`](src/instructions.ts) | Memory listener: the session-start batch, each read directory's memory, and removing the owned names from the workspace loader |
 | [`src/render.ts`](src/render.ts) | `Instructions from:` rendering under one byte budget |
 | [`src/rules.ts`](src/rules.ts) | `.claude/rules/**` discovery, `paths:` matching, and read-triggered folding |
@@ -185,7 +187,7 @@ Append-only; folded memory and rules follow the reusable request prefix and do n
 - **The takeover reads the workspace loader's message format** — removing the owned sections matches the `Instructions from:` / `Additional instructions from:` / `Updated instructions from:` / `Instructions removed:` headings that loader writes. A format change leaves both loaders injecting the file, which the composition specs in `tests/rules-composition.spec.ts` catch.
 - **An intro-only reminder survives a `CLAUDE.md`-only repository** — the loader's message is kept so it stays a visible baseline and is not recomposed on every step, leaving its one-line intro with no sections under it.
 - **Nested memory and path-scoped rules trigger on reads only** — matching Claude Code, both fold when the `read` tool touches a matching file; `write`/`edit` do not trigger them, so a rule or memory file authoring a file it scopes may not activate.
-- **Auto memory is read-only here** — the harness injects `MEMORY.md` but never appends to it, so a session's learnings do not reach Claude Code's own store.
+- **Auto-memory writes are opt-in** — when enabled, the model can save a new topic and index pointer through `claude_memory_write`. Existing topics are never overwritten, and the plugin never performs autonomous memory maintenance.
 - **Claude Code's `settings.json` is not consulted** — `autoMemoryDirectory` set there is ignored; the plugin's own `autoMemoryDirectory` field is the override.
 - **Imports are not approval-gated** — Claude Code asks before a project memory file imports a path outside the working directory; this package resolves such an import without asking.
 - **`AGENTS.md` keeps loading alongside `CLAUDE.md`** — Claude Code's default reads `AGENTS.md` only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working directory or above it; here the workspace loader still reads it on its own terms.
