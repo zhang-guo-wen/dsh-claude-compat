@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Claude Code compatibility for DeepSeek Harness: it adds Claude Code skills, memory files and path-scoped rules to a session — reading them, writing new memories — with a switch per capability in the settings page.
+
 ## Background: DeepSeek Harness
 
 DeepSeek Harness (`dsh`) is the open-source agent harness from DeepSeek AI, where nearly every capability is a plugin on [Cordis](https://github.com/cordiverse/cordis). It is in **developer preview** and iterating fast, so expect compatibility-breaking changes ([docs](https://deepseek-harness.github.io/deepseek-harness/), `0.1.7-alpha.*`); this plugin is a standalone third-party package that resolves `@deepseek-ai/*` from the running host.

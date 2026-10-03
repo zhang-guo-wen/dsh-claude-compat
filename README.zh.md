@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+为 DeepSeek Harness 提供 Claude Code 兼容：加载 Skills、读写记忆与作用域规则，并在设置页按能力分别开关。
+
 ## 背景：DeepSeek Harness
 
 DeepSeek Harness（`dsh`）是 DeepSeek AI 开源的 agent harness，几乎所有能力都是 [Cordis](https://github.com/cordiverse/cordis) 插件。它处于 **developer preview** 阶段、迭代很快，会有破坏性变更（[文档站](https://deepseek-harness.github.io/deepseek-harness/)，`0.1.7-alpha.*`）；本插件是独立第三方包，`@deepseek-ai/*` 运行时从宿主解析。
