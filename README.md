@@ -6,6 +6,8 @@ English | [中文](<README.zh.md>)
 
 Many projects already maintain skills, rules, and memory around Claude Code. This plugin makes those existing projects compatible with DeepSeek Harness by reusing their resources and optionally writing new memories. You can use DSH alongside Claude Code while maintaining just one set of resources, without separate migration or duplication.
 
+In the plugin list, display names and descriptions follow the Harness language setting in English or Chinese (English is the default fallback); English names use the package name without its npm scope, Chinese names describe the purpose, and installation still uses the unchanged real package name.
+
 ## Screenshot
 
 **Settings → Claude compatibility**: enable skill loading, memory loading, memory writing, and rule loading as needed.

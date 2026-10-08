@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude 兼容",
+    "description": "接入 Claude Code 技能、记忆读写与按路径生效的规则。"
+  }
+}
