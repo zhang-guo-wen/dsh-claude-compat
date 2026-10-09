@@ -1,7 +1,7 @@
 {
   "name": "@guowenzhang/dsh-claude-compat",
   "description": "Claude Code compatibility for DeepSeek Harness: skills, memory reading and writing, path-scoped rules, and settings switches",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "license": "Apache-2.0",
   "publishConfig": {
