@@ -164,8 +164,8 @@ describe('real agent-loop rules injection', () => {
         textResponse('rules ok'),
       ])
       ctx = new Context()
-      await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: '/' })
+      await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
       await ctx.plugin(ToolFs)
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(AgentLoop, { agents: [] })
@@ -226,8 +226,8 @@ describe('real agent-loop rules injection', () => {
         textResponse('rules ok'),
       ])
       ctx = new Context()
-      await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: '/' })
+      await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
       await ctx.plugin(ToolFs)
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(AgentLoop, { agents: [] })

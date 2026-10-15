@@ -69,7 +69,7 @@ specs 在**姊妹 Harness checkout** 里跑(那个目录才有 `vitest`),从 che
 
 ```sh
 node_modules/.bin/vitest run --root dsh-claude-compat                                   # 自足子集
-node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.config.ts # 全量 6 套
+node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.config.ts # 全量 7 套
 ```
 
 全量配置用 checkout 的 `tsconfig.base.json` paths 解析 `@deepseek-ai/*`、从 checkout 的 pnpm store 解析

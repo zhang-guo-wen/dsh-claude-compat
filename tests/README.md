@@ -14,7 +14,7 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
 `vitest.harness.config.ts` resolves `@deepseek-ai/*` through the checkout's
 `tsconfig.base.json` paths and React through the checkout's pnpm store, so every
 spec runs — including the real Loader and real agent-loop composition specs and
-the settings-section render spec. Six suites, 74 tests.
+the settings-section render spec. Seven suites, 85 tests.
 
 `rules-composition.spec.ts` carries the takeover acceptance case: it mounts this
 plugin and `@deepseek-ai/dsh-agent-instructions` in the deployed registration
@@ -22,6 +22,12 @@ order (this plugin first, as a host row registered at boot, against a loader
 that registers from the lazily-mounted agent preset) and asserts the first model
 request carries `CLAUDE.md` exactly once, with its `@import` expanded, while the
 loader's own `AGENTS.md` section survives.
+
+The composition specs mount the real directory fixture through
+`mountAgentLoopTestDependencies(ctx, { workingDirectory: true })`, after the
+local filesystem they read through. `@deepseek-ai/dsh-agent-instructions` and
+`@deepseek-ai/dsh-tool-fs` both inject `workingDirectory`, so without it those
+plugins stay inactive and the read tool never becomes available.
 
 ## Self-contained subset
 

@@ -63,10 +63,10 @@ async function loopHarness(adapter: ScriptedAdapter, claudeHome: string): Promis
  */
 async function takeoverHarness(adapter: ScriptedAdapter, claudeHome: string): Promise<Context> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
   // The Harness loader reads through the filesystem service, so this
   // composition needs one.
   await ctx.plugin(LocalFileSystem, { cwd: '/' })
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(ToolFs)
   await ctx.plugin(SkillRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
