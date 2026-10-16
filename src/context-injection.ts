@@ -1,6 +1,7 @@
 /**
- * Context-injection user settings: switches for skills, memory loading and
- * writing, and scoped rules. Writing requires memory loading.
+ * Context-injection user settings: switches for skills, prompt-file loading,
+ * auto-memory loading and writing, and scoped rules. Each switch is independent
+ * of the others.
  *
  * The switches are this plugin's Loader row Config, so the profile entry id
  * (`claude-compat`) is the namespace the settings page addresses and the schema
@@ -21,7 +22,7 @@ import z from '@deepseek-ai/schemastery'
 export const CONTEXT_INJECTION_NAMESPACE = 'claude-compat'
 
 /** One switchable part of the compatibility surface. */
-export type InjectionSwitch = 'skills' | 'rules' | 'memory' | 'memoryWrite'
+export type InjectionSwitch = 'skills' | 'rules' | 'memory' | 'autoMemory' | 'memoryWrite'
 
 /** The injection preferences this plugin publishes as live settings fields. */
 export interface ContextInjectionFlags {
@@ -29,8 +30,10 @@ export interface ContextInjectionFlags {
   skills: Volatile<boolean>
   /** Whether `.claude/rules/**` scoped rules are folded into the request. */
   rules: Volatile<boolean>
-  /** Whether the Claude Code memory files are folded into the request. */
+  /** Whether the Claude Code prompt files (`CLAUDE.md` and its `@path` imports) are folded into the request. */
   memory: Volatile<boolean>
+  /** Whether the auto-memory index (`MEMORY.md`) is folded into the request. */
+  autoMemory: Volatile<boolean>
   /** Whether the model may write Claude Code's auto-memory files. */
   memoryWrite: Volatile<boolean>
 }
@@ -41,6 +44,7 @@ export const CONTEXT_INJECTION_SCHEMA = z.object({
   skills: z.boolean().default(true).volatile(),
   rules: z.boolean().default(true).volatile(),
   memory: z.boolean().default(true).volatile(),
+  autoMemory: z.boolean().default(true).volatile(),
   memoryWrite: z.boolean().default(false).volatile(),
 })
 
@@ -49,6 +53,7 @@ export interface ContextInjectionConfig {
   skills?: boolean
   rules?: boolean
   memory?: boolean
+  autoMemory?: boolean
   memoryWrite?: boolean
 }
 
@@ -57,6 +62,7 @@ export interface InjectionFlags {
   skills: boolean
   rules: boolean
   memory: boolean
+  autoMemory: boolean
   memoryWrite: boolean
 }
 
@@ -76,6 +82,7 @@ export function contextInjectionFlags(config: ContextInjectionFlags): InjectionF
     skills: config.skills.get(),
     rules: config.rules.get(),
     memory: config.memory.get(),
-    memoryWrite: config.memory.get() && config.memoryWrite.get(),
+    autoMemory: config.autoMemory.get(),
+    memoryWrite: config.memoryWrite.get(),
   })
 }

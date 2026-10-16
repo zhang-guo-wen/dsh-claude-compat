@@ -43,8 +43,9 @@ Mount the plugin alongside the skill and tool registries; it requires `ctx.skill
 | `skills` | `true` | Add `.claude/skills` roots to the session skill catalog |
 | `includeProjectRoot` | `true` | Scan the project `.claude/skills` root |
 | `includeGlobalRoot` | `true` | Scan the user `~/.claude/skills` root |
-| `memory` | `true` | Fold the Claude Code memory files into the request |
-| `memoryWrite` | `false` | Let the model create topic files and index pointers in Claude Code's auto-memory directory when `memory` is on |
+| `memory` | `true` | Fold the Claude Code prompt files (`CLAUDE.md` and its imports) into the request |
+| `autoMemory` | `true` | Fold the auto-memory index `MEMORY.md` into the request |
+| `memoryWrite` | `false` | Let the model create topic files and index pointers in Claude Code's auto-memory directory |
 | `includeProjectRule` | `true` | Load the project `CLAUDE.md` chain |
 | `includeGlobalRule` | `true` | Load the user `~/.claude/CLAUDE.md` |
 | `includeNestedMemory` | `true` | Load a directory's memory files after a read under it |
@@ -62,7 +63,7 @@ Mount the plugin alongside the skill and tool registries; it requires `ctx.skill
 | `maxRuleSourceBytes` | `1048576` | Maximum UTF-8 bytes read from one rule file |
 | `maxRuleRenderBytes` | `262144` | Maximum UTF-8 bytes rendered in one rules batch |
 
-`skills`, `memory`, `memoryWrite`, and `rules` each have a settings-page switch. Writing requires loading; turning loading off clears writing in one settings mutation and withdraws the tool.
+`skills`, `memory`, `autoMemory`, `memoryWrite`, and `rules` each have a settings-page switch, and no switch depends on another.
 
 ### Skills
 
@@ -89,7 +90,7 @@ Each file renders as an `Instructions from: <displayPath>` block. The first requ
 
 `CLAUDE.md` and `CLAUDE.local.md` are the two names the Harness's own `agent-instructions` loader also claims, under different rules: it reads them from the same directories but expands no `@path` imports, caps a file at 1 MiB rather than 4 MiB, deduplicates same-directory content, and never reads the managed policy, the user home, `<dir>/.claude/CLAUDE.md`, or the auto-memory index. `takeOverClaudeMd` (default true) resolves the overlap: this package loads the two names, and every `agent-instructions` message entering a step has its `CLAUDE.md`/`CLAUDE.local.md` sections removed. The message itself is kept, because that loader confirms its baseline by message identity — a rewritten message stays a visible baseline instead of being re-composed. `AGENTS.md` and `AGENTS.local.md` keep loading from that loader, on its own terms.
 
-`<repository>` is the git repository root — a `.git` file resolves a linked worktree back to it — with every character outside `[A-Za-z0-9]` replaced by `-`, matching the directory names Claude Code writes under `projects/`. The index is folded at session start. When both `memory` and `memoryWrite` are on, `claude_memory_write` creates a new topic file and appends its pointer to the index. Turning off loading withdraws the write tool.
+`<repository>` is the git repository root — a `.git` file resolves a linked worktree back to it — with every character outside `[A-Za-z0-9]` replaced by `-`, matching the directory names Claude Code writes under `projects/`. The index is folded at session start, under its own switch: with `autoMemory` off the batch carries the prompt files alone, and with `memory` off it carries the index alone. `claude_memory_write` creates a new topic file and appends its pointer to the index under `memoryWrite`, independent of either loading switch.
 
 Two preprocessing rules apply to every loaded file. `@path` imports expand in place: relative to the importing file, `~/` against the process user home, at most `maxImportDepth` hops, skipping inline code spans and fenced code blocks, and expanding each file at most once per batch so a repeated or circular import stays literal. A token that names no readable file stays literal too, which is what keeps an `@mention` or an email address untouched. Block-level HTML comments are removed, while an inline comment, a comment inside a code fence, and an unterminated comment are kept.
 

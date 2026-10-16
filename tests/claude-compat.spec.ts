@@ -15,12 +15,19 @@ import { contextInjectionFlags } from '../src/context-injection.ts'
 import { instructionsSource, isInstructionsSource, PLUGIN_ID } from '../src/sources.ts'
 
 /** The live switches a resolved Config carries. */
-function config(over: { skills?: boolean; rules?: boolean; memory?: boolean; memoryWrite?: boolean } = {}): Config {
-  const value = { skills: true, rules: true, memory: true, memoryWrite: false, ...over }
+function config(over: {
+  skills?: boolean
+  rules?: boolean
+  memory?: boolean
+  autoMemory?: boolean
+  memoryWrite?: boolean
+} = {}): Config {
+  const value = { skills: true, rules: true, memory: true, autoMemory: true, memoryWrite: false, ...over }
   return {
     skills: { get: () => value.skills },
     rules: { get: () => value.rules },
     memory: { get: () => value.memory },
+    autoMemory: { get: () => value.autoMemory },
     memoryWrite: { get: () => value.memoryWrite },
   } as Config
 }
@@ -243,7 +250,7 @@ describe('plugin composition', () => {
 
   it('publishes the switches as live fields of its own row', () => {
     expect(CONTEXT_INJECTION_NAMESPACE).toBe(name)
-    for (const field of ['skills', 'rules', 'memory', 'memoryWrite'] as const) {
+    for (const field of ['skills', 'rules', 'memory', 'autoMemory', 'memoryWrite'] as const) {
       expect(Config.dict?.[field]?.meta.volatile).toBe(true)
     }
   })
@@ -282,30 +289,38 @@ describe('instructionsSource', () => {
 
 describe('contextInjectionFlags', () => {
   it('defaults loading on and writing off', () => {
-    expect(contextInjectionFlags(config())()).toEqual({ skills: true, rules: true, memory: true, memoryWrite: false })
+    expect(contextInjectionFlags(config())())
+      .toEqual({ skills: true, rules: true, memory: true, autoMemory: true, memoryWrite: false })
   })
 
   it('carries each composed switch through', () => {
     const flags = contextInjectionFlags(config({ skills: false, memory: false }))
-    expect(flags()).toEqual({ skills: false, rules: true, memory: false, memoryWrite: false })
+    expect(flags()).toEqual({ skills: false, rules: true, memory: false, autoMemory: true, memoryWrite: false })
   })
 
-  it('requires memory loading before writing is effective', () => {
-    expect(contextInjectionFlags(config({ memory: false, memoryWrite: true }))().memoryWrite).toBe(false)
-    expect(contextInjectionFlags(config({ memory: true, memoryWrite: true }))().memoryWrite).toBe(true)
+  it('keeps writing independent of loading', () => {
+    expect(contextInjectionFlags(config({ memory: false, memoryWrite: true }))().memoryWrite).toBe(true)
+    expect(contextInjectionFlags(config({ autoMemory: false, memoryWrite: true }))().memoryWrite).toBe(true)
+  })
+
+  it('keeps auto memory independent of prompt loading', () => {
+    expect(contextInjectionFlags(config({ memory: false }))().autoMemory).toBe(true)
+    expect(contextInjectionFlags(config({ autoMemory: false }))().memory).toBe(true)
   })
 
   it('observes a value committed after the reader was built', () => {
-    const live = { skills: false, rules: true, memory: true, memoryWrite: false }
+    const live = { skills: false, rules: true, memory: true, autoMemory: true, memoryWrite: false }
     const flags = contextInjectionFlags({
       skills: { get: () => live.skills },
       rules: { get: () => live.rules },
       memory: { get: () => live.memory },
+      autoMemory: { get: () => live.autoMemory },
       memoryWrite: { get: () => live.memoryWrite },
     } as Config)
     live.skills = true
     live.memory = false
+    live.autoMemory = false
     live.memoryWrite = true
-    expect(flags()).toEqual({ skills: true, rules: true, memory: false, memoryWrite: false })
+    expect(flags()).toEqual({ skills: true, rules: true, memory: false, autoMemory: false, memoryWrite: true })
   })
 })

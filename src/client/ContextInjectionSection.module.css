@@ -20,27 +20,6 @@
   gap: 16px;
 }
 
-/* Grouped explanatory content, not a control: R16 with the platform fill. */
-.intro {
-  margin: 0;
-  padding: 14px 16px;
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-module-platform);
-  font: var(--dsw-font-xs-13);
-  color: var(--dsw-alias-label-secondary);
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-}
-
-.switchSectionLabel {
-  margin: 4px 0 0;
-  font: var(--dsw-font-xxs-12);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--dsw-alias-label-tertiary);
-}
-
 .switchRow {
   display: flex;
   flex-direction: column;
@@ -48,7 +27,8 @@
   padding: 12px 0;
 }
 
-/* Label block left, switch right; the compatibility list sits under both. */
+/* Label and its one-line description left, switch right; the loading list sits
+   under both. */
 .switchHead {
   display: flex;
   align-items: flex-start;
@@ -68,9 +48,12 @@
   font-weight: 600;
 }
 
+/* One line per switch, stating the state it is in; long paths and Chinese copy
+   have to break rather than run past the panel edge. */
 .switchDesc {
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
 }
 
 /* One switch's write state, in the row that produced it. */
@@ -94,7 +77,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- Compatibility list under the master switch ---- */
+/* ---- What a switch loads: label, load paths as tags, one short hint ---- */
 
 .compatList {
   display: flex;
@@ -114,10 +97,35 @@
   border-left: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+.compatHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
 .compatTitle {
   font: var(--dsw-font-xxs-12);
   font-weight: 600;
   color: var(--dsw-alias-label-secondary);
+}
+
+.compatPaths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* A host `Tag` is a nowrap capsule. A path is one unbreakable token in a column
+   this narrow (the settings panel leaves about 560px on desktop and far less in
+   the phone layout), so the tag has to take the column width and break inside
+   itself instead of running past the panel edge. */
+.compatPaths > span {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .compatDetail {
@@ -136,6 +144,17 @@
   margin: 0;
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* The one line about the switches as a group; the hairline sets it apart from
+   the list it comments on. */
+.footnote {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
 }
 
 /* Compact arrangement by container width. The desktop settings column is about

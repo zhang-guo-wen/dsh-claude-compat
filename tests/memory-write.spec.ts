@@ -52,7 +52,7 @@ describe('Claude auto-memory writing', () => {
     changed?.([['memoryWrite']])
     expect(registered).toBe(1)
     enabled = false
-    changed?.([['memory']])
+    changed?.([['memoryWrite']])
     expect(withdrawn).toBe(1)
   })
 

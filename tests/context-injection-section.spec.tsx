@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -6,7 +9,14 @@ import {
   ContextInjectionSection,
   type ContextInjectionSectionProps,
 } from '../src/client/ContextInjectionSection.tsx'
-import { en, zh, type ContextInjectionSectionKey } from '../src/client/locales.ts'
+import {
+  en,
+  MAX_FOOTNOTE_LENGTH,
+  MAX_HINT_LENGTH,
+  MAX_LINE_LENGTH,
+  zh,
+  type ContextInjectionSectionKey,
+} from '../src/client/locales.ts'
 import {
   ContextInjectionController,
   type ContextInjectionFlags,
@@ -15,11 +25,16 @@ import {
   type SwitchSave,
 } from '../src/client/settings-controller.ts'
 
+/** React only runs `act`-wrapped work when the environment says it is testing. */
+const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+
 /** The resting write state every switch starts in. */
 const IDLE: SwitchSave = { phase: 'idle' }
 const IDLE_SAVES: Readonly<Record<InjectionSwitch, SwitchSave>> = {
   skills: IDLE,
   memory: IDLE,
+  autoMemory: IDLE,
   memoryWrite: IDLE,
   rules: IDLE,
 }
@@ -29,21 +44,29 @@ const READY: ContextInjectionSectionState = {
   writable: true,
   skills: true,
   memory: true,
+  autoMemory: true,
   memoryWrite: false,
   rules: true,
   saves: IDLE_SAVES,
 }
 
-/** Render the section with a real dictionary and a fixed settings snapshot. */
-function render(locale: 'zh' | 'en', state: Partial<ContextInjectionSectionState> = {}): string {
+/** The section's props for a locale and a fixed settings snapshot. */
+function propsOf(
+  locale: 'zh' | 'en',
+  state: Partial<ContextInjectionSectionState> = {},
+): ContextInjectionSectionProps {
   const dictionary = locale === 'zh' ? zh : en
   const snapshot: ContextInjectionSectionState = { ...READY, ...state }
-  const props = {
+  return {
     t: (key: ContextInjectionSectionKey) => dictionary[key],
     useContextInjection: (selector: (value: ContextInjectionSectionState) => unknown) => selector(snapshot),
     toggle: () => Promise.resolve(),
   } as unknown as ContextInjectionSectionProps
-  return renderToStaticMarkup(<ContextInjectionSection {...props} />)
+}
+
+/** Render the section with a real dictionary and a fixed settings snapshot. */
+function render(locale: 'zh' | 'en', state: Partial<ContextInjectionSectionState> = {}): string {
+  return renderToStaticMarkup(<ContextInjectionSection {...propsOf(locale, state)} />)
 }
 
 /** React escapes the text it renders, so compare against escaped copy. */
@@ -73,45 +96,74 @@ describe('context-injection section switches', () => {
   it('gives each part of the surface its own switch', () => {
     const html = render('zh')
     expect(html.match(/role="switch"/g)).toHaveLength(COMPAT_SWITCHES.length)
-    expect(COMPAT_SWITCHES.map(entry => entry.name)).toEqual(['skills', 'memory', 'memoryWrite', 'rules'])
+    expect(COMPAT_SWITCHES.map(entry => entry.name))
+      .toEqual(['skills', 'memory', 'autoMemory', 'memoryWrite', 'rules'])
   })
 
-  it('names what each switch loads, in both languages', () => {
+  it('labels every switch, its state line and every load path, in both languages', () => {
     for (const locale of ['zh', 'en'] as const) {
       const dictionary = locale === 'zh' ? zh : en
       const html = render(locale)
       for (const entry of COMPAT_SWITCHES) {
         expect(html).toContain(escaped(dictionary[entry.label]))
-        expect(html).toContain(escaped(dictionary[entry.desc]))
+        expect(html).toContain(escaped(dictionary[entry.on]))
         for (const item of entry.entries) {
           expect(html).toContain(escaped(dictionary[item.title]))
-          expect(html).toContain(escaped(dictionary[item.detail]))
+          expect(html).toContain(escaped(dictionary[item.hint]))
+          for (const path of item.paths) expect(html).toContain(escaped(path))
         }
       }
+      expect(html).toContain(escaped(dictionary.footer))
     }
   })
 
-  it('states the load timing of the memory entries', () => {
+  it('shows the line for the state the switch is in, never both', () => {
+    const on = render('zh')
+    expect(on).toContain(escaped(zh['prompts.on']))
+    expect(on).not.toContain(escaped(zh['prompts.off']))
+
+    const off = render('zh', { memory: false })
+    expect(off).toContain(escaped(zh['prompts.off']))
+    expect(off).not.toContain(escaped(zh['prompts.on']))
+    // One line per switch row: the off state replaces the on line rather than
+    // stacking under it.
+    expect(off).not.toContain(escaped(zh['prompts.on']))
+    // Nothing on this page is hover-only: a touch device has no hover.
+    expect(on).not.toContain('title="')
+  })
+
+  it('holds every line to its own ceiling and drops the intro card', () => {
+    const keys = Object.keys(zh)
+    expect(keys).not.toContain('intro')
+    const kindOf = (key: string): number | undefined => {
+      if (key.endsWith('.hint')) return MAX_HINT_LENGTH
+      if (key.endsWith('.on') || key.endsWith('.off')) return MAX_LINE_LENGTH
+      if (key === 'footer') return MAX_FOOTNOTE_LENGTH
+      return undefined
+    }
+    const capped = keys.filter(key => kindOf(key) !== undefined)
+    expect(capped.length).toBeGreaterThan(0)
+    for (const locale of ['zh', 'en'] as const) {
+      const dictionary = locale === 'zh' ? zh : en
+      for (const key of capped) {
+        expect(dictionary[key].length, `${locale}:${key}`).toBeLessThanOrEqual(kindOf(key)!)
+      }
+    }
+    // One footer paragraph, and no other prose in the resting state.
     const html = render('zh')
-    // Each entry's copy carries its own timing, so the page answers "when does
-    // this reach the model?" without the README.
-    expect(html).toContain('会话开始时注入一次')
-    expect(html).toContain('读到某个目录下的文件后')
-    expect(html).toContain('最多 4 跳')
-    expect(html).toContain('只读')
+    expect(html.match(/<p/g)).toHaveLength(1)
+    expect(html).toContain(escaped(zh.footer))
   })
 
   it('reflects each switch independently', () => {
-    expect(render('zh', { memory: false })).toContain('aria-checked="false"')
     const html = render('zh', { memory: false })
     expect(html.match(/aria-checked="false"/g)).toHaveLength(2)
-    expect(html.match(/aria-checked="true"/g)).toHaveLength(2)
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(3)
   })
 
-  it('disables writing until memory loading is on', () => {
+  it('keeps writing operable while prompt loading is off', () => {
     const html = render('zh', { memory: false, memoryWrite: true })
-    expect(html).toContain(escaped(zh['memoryWrite.requiresMemory']))
-    expect(html.match(/disabled=""/g)?.length).toBe(1)
+    expect(html.match(/disabled=""/g) ?? []).toHaveLength(0)
   })
 
   it('reports each switch write in the row that produced it', () => {
@@ -120,14 +172,32 @@ describe('context-injection section switches', () => {
     // A write in flight closes its own switch, so a second click cannot race it.
     expect(saving.match(/disabled=""/g)?.length).toBe(1)
 
-    expect(render('zh', { saves: { ...IDLE_SAVES, rules: { phase: 'saved' } } })).toContain(escaped(zh.saved))
-
     const failed = render('zh', { saves: { ...IDLE_SAVES, memory: { phase: 'failed', message: 'read-only document' } } })
     expect(failed).toContain(escaped(zh.saveFailed))
     expect(failed).toContain('read-only document')
     expect(failed).toContain(escaped(zh.retry))
     // The switch itself stays on the committed value, so it is still operable.
     expect(failed.match(/disabled=""/g)?.length ?? 0).toBe(0)
+  })
+
+  it('hands a landed flip to the host banner, not to the row', async () => {
+    // The banner is a render effect around the host `Toast`, so it only exists
+    // once the section is mounted; a static render cannot show it.
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(<ContextInjectionSection
+          {...propsOf('zh', { saves: { ...IDLE_SAVES, rules: { phase: 'saved' } } })}
+        />)
+      })
+      expect(document.body.textContent).toContain(`${zh.saved} · ${zh.rules}`)
+      expect(container.textContent).not.toContain(zh.saved)
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
   })
 
   it('explains an unavailable deployment and what to check', () => {
@@ -148,27 +218,30 @@ describe('context-injection section switches', () => {
 })
 
 describe('context-injection controller writes', () => {
-  it('clears writing atomically when memory loading is turned off', async () => {
+  it('writes only the switch that was flipped', async () => {
     const writes: unknown[] = []
-    const value: ContextInjectionFlags = { skills: true, memory: true, memoryWrite: true, rules: true }
+    const value: ContextInjectionFlags = { skills: true, memory: true, autoMemory: true, memoryWrite: true, rules: true }
     const scope = scopeOf(value, operation => { writes.push(operation); return Promise.resolve(true) })
     const controller = new ContextInjectionController(scope)
     const face = controller.inject()
     await face.toggle('memory')
-    expect(writes).toEqual([[
-      { op: 'set', path: ['memoryWrite'], value: false },
-      { op: 'set', path: ['memory'], value: false },
-    ]])
-    writes.length = 0
-    value.memory = false
-    value.memoryWrite = false
-    await face.toggle('memoryWrite')
-    expect(writes).toEqual([])
+    await face.toggle('autoMemory')
+    expect(writes).toEqual([
+      { field: 'memory', next: false },
+      { field: 'autoMemory', next: false },
+    ])
+    controller.dispose()
+  })
+
+  it('publishes writing independently of loading', () => {
+    const value: ContextInjectionFlags = { skills: true, memory: false, autoMemory: false, memoryWrite: true, rules: true }
+    const controller = new ContextInjectionController(scopeOf(value))
+    expect(controller.inject().hooks.contextInjection.getSnapshot().memoryWrite).toBe(true)
     controller.dispose()
   })
 
   it('publishes saving then saved around a committed write', async () => {
-    const value: ContextInjectionFlags = { skills: true, memory: true, memoryWrite: false, rules: true }
+    const value: ContextInjectionFlags = { skills: true, memory: true, autoMemory: true, memoryWrite: false, rules: true }
     const controller = new ContextInjectionController(scopeOf(value))
     const face = controller.inject()
     const phases: string[] = []
@@ -182,7 +255,7 @@ describe('context-injection controller writes', () => {
   })
 
   it('reports a refused write and keeps the committed value', async () => {
-    const value: ContextInjectionFlags = { skills: true, memory: true, memoryWrite: false, rules: true }
+    const value: ContextInjectionFlags = { skills: true, memory: true, autoMemory: true, memoryWrite: false, rules: true }
     const scope = scopeOf(value, () => Promise.reject(new Error('read-only document')))
     const controller = new ContextInjectionController(scope)
     const face = controller.inject()
@@ -196,7 +269,7 @@ describe('context-injection controller writes', () => {
 
   it('drops a success note instead of leaving it on the row', async () => {
     vi.useFakeTimers()
-    const value: ContextInjectionFlags = { skills: true, memory: true, memoryWrite: false, rules: true }
+    const value: ContextInjectionFlags = { skills: true, memory: true, autoMemory: true, memoryWrite: false, rules: true }
     const controller = new ContextInjectionController(scopeOf(value))
     const face = controller.inject()
     try {

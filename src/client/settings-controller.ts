@@ -1,13 +1,14 @@
 /**
  * Controller bridging the Host `claude-compat` settings namespace onto the
  * Harness-compat section snapshot. Reads the compatibility switches for
- * skills, memory loading and writing, and scoped rules, then flips one through
- * the configuration form.
+ * skills, prompt files, auto memory, memory writing, and scoped rules, then
+ * flips one through the configuration form.
  *
  * A flip is asynchronous, so each switch publishes its own write state: the
  * section shows 保存中 / 已保存 / 失败 beside the switch that was flipped, and
  * the Host's committed value stays the source of the switch position (a failed
- * write therefore leaves the switch where it was).
+ * write therefore leaves the switch where it was). Every switch writes only
+ * itself: the Host keeps no switch dependent on another.
  *
  * @module @guowenzhang/dsh-claude-compat/client/settings-controller
  */
@@ -22,6 +23,7 @@ export const CONTEXT_INJECTION_NS = 'claude-compat'
 export interface ContextInjectionFlags {
   skills: boolean
   memory: boolean
+  autoMemory: boolean
   memoryWrite: boolean
   rules: boolean
 }
@@ -48,6 +50,7 @@ export interface ContextInjectionSectionState {
   writable: boolean
   skills: boolean
   memory: boolean
+  autoMemory: boolean
   memoryWrite: boolean
   rules: boolean
   /** Per-switch write state, so one failed write is reported where it happened. */
@@ -103,18 +106,9 @@ export class ContextInjectionController {
     if (snapshot.status !== 'ready' || !snapshot.writable) return
     const value = snapshot.value?.[name]
     if (value === undefined) return
-    if (name === 'memoryWrite' && !snapshot.value?.memory) return
     this.setSave(name, { phase: 'saving' })
     try {
-      if (name === 'memory' && value && snapshot.value?.memoryWrite) {
-        // Commit both fields in one Host mutation, so no saved state violates the dependency.
-        await this.scope.mutate([
-          { op: 'set', path: ['memoryWrite'], value: false },
-          { op: 'set', path: ['memory'], value: false },
-        ])
-      } else {
-        await this.scope.set(name, !value)
-      }
+      await this.scope.set(name, !value)
     } catch (error) {
       this.setSave(name, { phase: 'failed', message: error instanceof Error ? error.message : String(error) })
       return
@@ -146,11 +140,13 @@ export class ContextInjectionController {
       writable: snapshot.writable,
       skills: snapshot.value?.skills ?? true,
       memory: snapshot.value?.memory ?? true,
-      memoryWrite: (snapshot.value?.memory ?? true) && (snapshot.value?.memoryWrite ?? false),
+      autoMemory: snapshot.value?.autoMemory ?? true,
+      memoryWrite: snapshot.value?.memoryWrite ?? false,
       rules: snapshot.value?.rules ?? true,
       saves: {
         skills: this.saves.get('skills') ?? IDLE,
         memory: this.saves.get('memory') ?? IDLE,
+        autoMemory: this.saves.get('autoMemory') ?? IDLE,
         memoryWrite: this.saves.get('memoryWrite') ?? IDLE,
         rules: this.saves.get('rules') ?? IDLE,
       },

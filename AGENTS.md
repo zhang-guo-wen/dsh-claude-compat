@@ -41,8 +41,9 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
 1. **`CLAUDE.md` / `CLAUDE.local.md` 由本插件独占。** 这两个名字 harness 的 `agent-instructions` 也会读
    (规则不同),所以 `src/instructions.ts` 在每个 `agent/pre-step` 里把该加载器消息中这两个名字的段落剥掉。
    改 harness 那侧的渲染格式会让剥离静默失效。`takeOverClaudeMd: false` 可整个关掉接管。
-   `.claude/skills` / 记忆文件 / `.claude/rules/**` 是 `skills` / `memory` / `rules` 三条独立通路,
-   scope 各有自己的开关,不要并成一条(见 [.claude/rules/rules-and-memory.md](.claude/rules/rules-and-memory.md))。
+   `.claude/skills` / 记忆文件（`CLAUDE.md`）/ 自动记忆索引 / `.claude/rules/**` 是 `skills` / `memory` / `autoMemory` /
+   `rules` 四条独立通路,scope 各有自己的开关,不要并成一条;`memoryWrite` 是第五条独立开关,不依赖任何加载开关
+   (见 [.claude/rules/rules-and-memory.md](.claude/rules/rules-and-memory.md))。
 2. **依赖的服务用 `ctx.get('x')` 取,不要 `ctx.x` 属性访问** —— 未 inject 的服务属性在 Cordis 的 inject guard 下会抛错。
 3. **client 半边必须打成 `window.__ModuleLoader__.load({ id, factory })` 格式**;`HANDOFF_ID` **必须始终等于包名** ——
    它是 handoff 身份(启动图按 id 找 factory),不是 revision,改它会让 Web 启动图找不到该插件。
@@ -51,7 +52,7 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
    自造 kind 会让历史会话打不开(代价见 [.claude/rules/pitfalls.md](.claude/rules/pitfalls.md) 第 5 条)。
 6. **Node 不解析 TC39 装饰器** —— `tsdown.config.ts` 的 `lowerDecorators` transform 不能删,
    否则 `@Remote` 会以原始语法留在 `lib/index.mjs`,host 加载即崩。
-7. **四个设置页开关是插件行 Config 上的 `Volatile` 字段** —— 设置页写入的值不经过重挂载就到达运行中的插件,
+7. **五个设置页开关是插件行 Config 上的 `Volatile` 字段** —— 设置页写入的值不经过重挂载就到达运行中的插件,
    它们不属于「重建 `lib/` 后要重启宿主」那条规则。
 8. **加了能力就要同步 `src/client/locales.ts` 的词条与 `ContextInjectionSection.tsx` 的 `COMPAT_SWITCHES`**,
    否则 UI 会继续按老清单描述。

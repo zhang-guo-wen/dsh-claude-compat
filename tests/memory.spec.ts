@@ -722,16 +722,68 @@ describe('claudeInstructionListener', () => {
     })
   })
 
-  it('folds nothing when Claude injection is disabled', async () => {
+  it('folds nothing when both loading switches are off', async () => {
     await withTempDir(async (root) => {
       const project = join(root, 'project')
       await mkdir(join(project, '.git'), { recursive: true })
       await writeMemoryFile(project, '.claude/CLAUDE.md', 'baseline memory')
 
       const test = harness(project)
-      claudeInstructionListener(test.ctx, { claudeHome: join(root, 'home'), ...LOCAL_ONLY }, () => false)
+      claudeInstructionListener(test.ctx, { claudeHome: join(root, 'home'), ...LOCAL_ONLY }, () => false, () => false)
 
       expect(messageTexts(await test.step([prompt()]))).toEqual(['prompt'])
+    })
+  })
+
+  it('folds the auto-memory index while prompt loading is off', async () => {
+    await withTempDir(async (root) => {
+      const project = join(root, 'project')
+      await mkdir(join(project, '.git'), { recursive: true })
+      await writeMemoryFile(project, 'CLAUDE.md', 'prompt memory')
+      const memoryDir = join(root, 'memory')
+      await writeMemoryFile(memoryDir, 'MEMORY.md', '- [topic](topic.md)')
+      const workspace = createUserMessage({
+        content: [{ type: 'text', text: 'Instructions from: CLAUDE.md\n\nprompt memory' }],
+        source: { kind: 'agent-instructions', form: 'instructions' } as never,
+      })
+
+      const test = harness(project)
+      claudeInstructionListener(
+        test.ctx,
+        { claudeHome: join(root, 'home'), includeManagedMemory: false, autoMemoryDirectory: memoryDir },
+        () => false,
+        () => true,
+      )
+
+      const texts = messageTexts(await test.step([workspace, prompt()]))
+      expect(texts).toEqual([
+        // The takeover belongs to prompt loading, so the workspace loader keeps
+        // its own section for the file this switch left alone.
+        'Instructions from: CLAUDE.md\n\nprompt memory',
+        'prompt',
+        `Instructions from: ${join(memoryDir, 'MEMORY.md')}\n\n- [topic](topic.md)`,
+      ])
+    })
+  })
+
+  it('leaves the auto-memory index out while auto memory is off', async () => {
+    await withTempDir(async (root) => {
+      const project = join(root, 'project')
+      await mkdir(join(project, '.git'), { recursive: true })
+      await writeMemoryFile(project, 'CLAUDE.md', 'prompt memory')
+      const memoryDir = join(root, 'memory')
+      await writeMemoryFile(memoryDir, 'MEMORY.md', '- [topic](topic.md)')
+
+      const test = harness(project)
+      claudeInstructionListener(
+        test.ctx,
+        { claudeHome: join(root, 'home'), includeManagedMemory: false, autoMemoryDirectory: memoryDir },
+        () => true,
+        () => false,
+      )
+
+      expect(messageTexts(await test.step([prompt()])))
+        .toEqual(['prompt', 'Instructions from: CLAUDE.md\n\nprompt memory'])
     })
   })
 })

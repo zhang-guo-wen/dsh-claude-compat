@@ -14,7 +14,7 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
 `vitest.harness.config.ts` resolves `@deepseek-ai/*` through the checkout's
 `tsconfig.base.json` paths and React through the checkout's pnpm store, so every
 spec runs — including the real Loader and real agent-loop composition specs and
-the settings-section render spec. Seven suites, 85 tests.
+the settings-section render spec. Seven suites, 94 tests.
 
 `rules-composition.spec.ts` carries the takeover acceptance case: it mounts this
 plugin and `@deepseek-ai/dsh-agent-instructions` in the deployed registration
@@ -40,11 +40,12 @@ node_modules/.bin/vitest run --root dsh-claude-compat
 no Harness runtime package and no React requires:
 
 - `tests/memory.spec.ts` — memory-file discovery, `@path` imports, auto memory,
-  nested memory, the `CLAUDE.md` takeover, and the listener.
+  nested memory, the `CLAUDE.md` takeover, and the listener, including the
+  prompt-loading / auto-memory split.
 - `tests/memory-write.spec.ts` — Claude auto-memory topic creation, index updates,
   path restrictions, and the independent live write switch.
 - `tests/claude-compat.spec.ts` — `SKILL.md` parsing, the skill provider, memory
-  loading, and the plugin registration.
+  loading, and the plugin registration, including the independent switches.
 
 The rest need the full run: `rules.spec.ts`, `rules-composition.spec.ts`, and
 `loader-composition.spec.ts` mount `@deepseek-ai/dsh-agent-loop`, `-testkit`,

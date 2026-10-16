@@ -93,6 +93,28 @@ export async function loadClaudeInstructions(
 type EnterDecision = Extract<PreStepDecision, { kind: 'enter' }>
 
 /**
+ * The session-start batch's file selection under the two loading switches.
+ *
+ * Prompt loading owns the managed-policy, user, and project `CLAUDE.md` files;
+ * auto memory owns the index. A switch that is off turns its own sources off
+ * on top of the composition's per-source fields, so the batch carries exactly
+ * what the switches asked for.
+ * @param config - the contributor's configured file selection.
+ * @param prompts - whether the `CLAUDE.md` file set is on.
+ * @param autoMemory - whether the auto-memory index is on.
+ * @returns the file selection to read the batch with.
+ */
+function selectedBatch(config: InstructionConfig, prompts: boolean, autoMemory: boolean): InstructionConfig {
+  return {
+    ...config,
+    includeManagedMemory: prompts && config.includeManagedMemory !== false,
+    includeGlobalRule: prompts && config.includeGlobalRule !== false,
+    includeProjectRule: prompts && config.includeProjectRule !== false,
+    includeAutoMemory: autoMemory && config.includeAutoMemory !== false,
+  }
+}
+
+/**
  * Remove this plugin's memory files from the Harness loader's messages.
  *
  * A section is removed when its header names `CLAUDE.md` or `CLAUDE.local.md`
@@ -190,14 +212,22 @@ export function foldContext(
  * Register the Claude Code memory listeners: an `agent/pre-step` listener that
  * folds the session-start batch and each read directory's memory, plus a
  * `tools/result` listener that records which files were read.
+ *
+ * Prompt loading and auto-memory loading are independent switches. Prompt
+ * loading owns the `CLAUDE.md` file set, its directory chain, and the takeover
+ * that strips those names from the workspace instruction loader; auto memory
+ * owns the `MEMORY.md` index alone, so it still folds while prompt loading is
+ * off, and the index stays out while it is off.
  * @param ctx - plugin context.
  * @param config - home, root markers, file selection, and byte budgets.
- * @param isEnabled - thunk returning whether Claude memory injection is on.
+ * @param isEnabled - thunk returning whether the Claude prompt files are on.
+ * @param isAutoMemoryEnabled - thunk returning whether the auto-memory index is on.
  */
 export function claudeInstructionListener(
   ctx: Context,
   config: InstructionConfig = {},
   isEnabled: () => boolean = () => true,
+  isAutoMemoryEnabled: () => boolean = () => true,
 ): void {
   const states = new WeakMap<Session, MemorySessionState>()
 
@@ -206,22 +236,28 @@ export function claudeInstructionListener(
     next: () => Promise<PreStepDecision>,
   ): Promise<PreStepDecision> => {
     const decision = await next()
-    if (!isEnabled()) return decision
+    const prompts = isEnabled()
+    const autoMemory = isAutoMemoryEnabled()
+    if (!prompts && !autoMemory) return decision
     if (decision.kind === 'reject') return decision
     const session = agent.session
     if (session === undefined) return decision
-    let amended: EnterDecision = config.takeOverClaudeMd === false ? decision : stripHarnessClaudeMemory(decision)
+    // The `CLAUDE.md` takeover is part of prompt loading: with that switch off,
+    // the workspace instruction loader keeps its own sections for those names.
+    let amended: EnterDecision = config.takeOverClaudeMd === false || !prompts
+      ? decision
+      : stripHarnessClaudeMemory(decision)
     const folded = foldedInstructionPaths(session, amended.messages)
     if (!folded.has(BASELINE_LOADER)) {
       if (amended.messages.length === 0) return amended
       const cwd = session.header?.cwd
       if (cwd === undefined) return amended
-      const context = await loadClaudeInstructions(cwd, ctx, config)
+      const context = await loadClaudeInstructions(cwd, ctx, selectedBatch(config, prompts, autoMemory))
       signal.throwIfAborted()
       if (context !== undefined) amended = injectIntoFirstRequest(amended, context)
     }
     const state = ensureMemoryState(session, states)
-    if (state.reads.size === 0) return amended
+    if (!prompts || state.reads.size === 0) return amended
     const reads = [...state.reads]
     state.reads.clear()
     const cwd = session.header?.cwd

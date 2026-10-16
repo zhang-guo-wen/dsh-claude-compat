@@ -126,7 +126,7 @@ export function registerClaudeMemoryWriteTool(ctx: Context, config: MemoryConfig
   }
   sync()
   ctx.on('loader/volatile-update', paths => {
-    if (paths.some(path => path[0] === 'memoryWrite' || path[0] === 'memory')) sync()
+    if (paths.some(path => path[0] === 'memoryWrite')) sync()
   })
   ctx.effect(() => () => { withdraw?.() }, 'claude-compat: memory write tool lifetime')
 }

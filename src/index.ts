@@ -49,6 +49,8 @@ export interface Config extends ProviderConfig, InstructionConfig, RulesConfig {
   rules: Volatile<boolean>
   /** Whether the Claude Code memory files are folded into the request. */
   memory: Volatile<boolean>
+  /** Whether Claude Code's auto-memory index is folded into the request. */
+  autoMemory: Volatile<boolean>
   /** Whether the model may write Claude Code's auto-memory files. */
   memoryWrite: Volatile<boolean>
 }
@@ -122,7 +124,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     'maxMemorySourceBytes',
     'maxMemoryRenderBytes',
     'maxImportDepth',
-  ]), () => flags().memory)
+  ]), () => flags().memory, () => flags().autoMemory)
   claudeRulesListener(ctx, pickDefined(config, [
     'claudeHome',
     'projectRootMarkers',

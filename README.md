@@ -10,7 +10,7 @@ In the plugin list, display names and descriptions follow the Harness language s
 
 ## Screenshot
 
-**Settings → Claude compatibility**: enable skill loading, memory loading, memory writing, and rule loading as needed. Each switch reports its own saving / saved / failed state, with a retry when a write is refused.
+**Settings → Claude compatibility**: five switches cover skill loading, memory loading, auto-memory loading, memory writing, and rule loading. Each switch has exactly one line, and that line states **the state the switch is in** — what it loads and its byte limits while it is on, what its off state does while it is off. Under it every entry lists its label, load paths, and a one-line hint, and one footer line states when a switch change takes effect.
 
 ![Claude compatibility settings](<docs/images/claude-compat-settings.png>)
 
@@ -26,7 +26,9 @@ Restart DSH after installation, then open **Settings → Claude compatibility**.
 
 ## Notes
 
-- Skills, memory, and rule loading are enabled by default. Memory writing is disabled by default and requires memory loading to be enabled first.
+- Skills, memory, auto-memory, and rule loading are enabled by default; memory writing is disabled by default. No switch depends on another: memory writing does not require any loading switch to be enabled first.
+- A switch change applies to the **next request**: turning loading off does not take back what this session already folded, and a batch this session already folded is not folded again after turning a switch back on (memory and auto memory are separate paths, so the same holds for each). Start a new session after changing them.
+- Writing only adds: a topic file is never overwritten, and `MEMORY.md` refuses new entries once it reaches 200 lines or 25 KB.
 - Project and user `.claude` resources are reused. Memories are written only when the model calls the tool; existing memories are not automatically organized, overwritten, or deleted. When using Claude Code alongside DSH, avoid editing the same file simultaneously.
 - Memory does not update live when files change; start a new session after changes. Nested memory and rules with `paths` load only after matching files are read, not when they are written or edited.
 - Claude Code's `settings.json` is not read. Configure options such as a custom memory directory in this plugin instead.
