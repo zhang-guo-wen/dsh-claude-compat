@@ -1,3 +1,13 @@
+---
+paths:
+  - "src/**"
+  - "cordis.patch.yml"
+  - "package.json"
+  - "docs/**"
+  - "README.md"
+  - "README.zh.md"
+---
+
 覆盖什么、何时读：四条技术决策（仓库根即包、`CLAUDE.md` 独占、开关做成 `Volatile` 字段、消息源用通用 `plugin` kind）及其理由与被否决的替代方案。要改这些设计、或需要向别人解释「为什么这么写」时读我。
 
 # 技术决策

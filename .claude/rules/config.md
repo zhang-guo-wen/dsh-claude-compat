@@ -1,3 +1,13 @@
+---
+paths:
+  - "src/**"
+  - "cordis.patch.yml"
+  - "package.json"
+  - "README.md"
+  - "README.zh.md"
+  - "tests/**"
+---
+
 覆盖什么、何时读：`@guowenzhang/dsh-claude-compat` 插件行的**全部配置字段、默认值与含义**，以及组合里 `config:` 的写法。改配置字段、写 profile 或组合配置，或要回答「某字段默认值是什么 / 这个开关归谁管」时读我。
 
 # 配置

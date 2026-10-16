@@ -1,3 +1,11 @@
+---
+paths:
+  - "src/**"
+  - "cordis.patch.yml"
+  - "package.json"
+  - "lib/**"
+---
+
 覆盖什么、何时读：Cordis 插件契约（`{ name, inject, apply }`、`ctx.effect`、`ctx.get`）、client handoff 格式与 `HANDOFF_ID`，以及 `cordis.patch.yml` 与 `package.json` 的 `dsh` 字段如何接线。改 host/client 入口、动组合接线，或排查「插件没被加载 / 启动图找不到该插件」时读我。
 
 # 插件契约(Cordis)与组合接线

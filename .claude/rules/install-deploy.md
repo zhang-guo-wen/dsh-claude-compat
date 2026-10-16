@@ -1,3 +1,14 @@
+---
+paths:
+  - "README.md"
+  - "README.zh.md"
+  - "package.json"
+  - "package-lock.json"
+  - "cordis.patch.yml"
+  - "lib/**"
+  - "docs/**"
+---
+
 覆盖什么、何时读：五个安装变体（npm / HTTPS / SSH / 锁发布 tag / 本地目录）、卸载与部署，以及 `lib/` 重建后的生效语义。给别人装这个插件、或要解释「改了源码为什么没生效」时读我。
 
 # 安装与部署

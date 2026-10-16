@@ -1,3 +1,15 @@
+---
+paths:
+  - "package.json"
+  - "package-lock.json"
+  - "lib/**"
+  - "README.md"
+  - "README.zh.md"
+  - "NOTICE"
+  - "LICENSE"
+  - "docs/**"
+---
+
 覆盖什么、何时读：发版流程——改版本号 → `npm run build` → 提交源码与 `lib/` → 打带注释 tag → 验证安装。要发版、或核对 tag 与 `package.json` 版本号是否一致时读我。
 
 # 发版(Release)

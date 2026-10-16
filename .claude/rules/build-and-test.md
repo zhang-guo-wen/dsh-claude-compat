@@ -1,3 +1,15 @@
+---
+paths:
+  - "package.json"
+  - "tsconfig.json"
+  - "tsdown.config.ts"
+  - "build-client.mjs"
+  - "vitest.config.ts"
+  - "vitest.harness.config.ts"
+  - "tests/**"
+  - "lib/**"
+---
+
 覆盖什么、何时读：`npm run build` 的两段打包（tsdown / rolldown）与 TC39 装饰器降级，以及 specs 在姊妹 Harness checkout 里的两种跑法与各自覆盖范围。改构建配置、改 host/client 入口，或在验收前确认该跑哪套测试时读我。
 
 # 构建与验证(specs)

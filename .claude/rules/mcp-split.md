@@ -1,3 +1,13 @@
+---
+paths:
+  - "src/**"
+  - "package.json"
+  - "cordis.patch.yml"
+  - "README.md"
+  - "README.zh.md"
+  - "docs/**"
+---
+
 覆盖什么、何时读：MCP 管理为什么拆成独立仓、拆分后两边各自的设置命名空间与设置页区块、以及依赖边界。被问及「MCP 功能在哪 / 那个设置项为什么没了」，或要动设置命名空间时读我。
 
 # MCP 管理已拆分

@@ -1,3 +1,12 @@
+---
+paths:
+  - "src/client/**"
+  - "src/context-injection.ts"
+  - "src/index.ts"
+  - "locale/**"
+  - "tests/**"
+---
+
 覆盖什么、何时读：设置页四个开关的保存中 / 已保存 / 失败反馈机制、`ContextInjectionSection` 的界面几何与排版约定，以及覆盖它的测试。改设置页 UI、控制器保存路径或相关文案时读我。
 
 # 设置页开关的写入反馈

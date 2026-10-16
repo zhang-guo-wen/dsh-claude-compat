@@ -1,3 +1,11 @@
+---
+paths:
+  - "src/**"
+  - "tests/**"
+  - "lib/**"
+  - "package.json"
+---
+
 覆盖什么、何时读：六条已知易崩点（`ctx.x` 属性访问、client 包格式、CSS module 类名、浏览器跑旧 bundle、自造 message source kind、剥段落依赖宿主消息格式）及其症状与实测代价。动手改 host/client、样式或消息源之前先读我。
 
 # 易崩清单

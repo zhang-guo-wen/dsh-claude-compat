@@ -1,3 +1,9 @@
+---
+paths:
+  - "src/**"
+  - "tests/**"
+---
+
 > 覆盖什么、何时读：Claude Code 记忆文件与 `.claude/rules/**` 的加载时机、`CLAUDE.md` / `CLAUDE.local.md` 接管（`agent/pre-step` 剥离）、项目 / 用户 / 托管 / 嵌套 / 自动记忆的 scope 隔离与兼容映射。改 `src/memory.ts`、`src/instructions.ts`，或排查「规则没折进来 / 同一份 `CLAUDE.md` 被注入两次 / 该读哪个目录」时读我。字段默认值与上限见 [config.md](config.md)，崩溃症状见 [pitfalls.md](pitfalls.md)。
 
 # 规则折入、CLAUDE.md 接管与 scope 隔离
