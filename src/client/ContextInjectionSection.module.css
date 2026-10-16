@@ -1,9 +1,17 @@
+/*
+ * The section is one column inside the host settings panel: the shell owns the
+ * 800px panel, its 188px nav rail and the content inset, so this file declares
+ * its own container and reading cap rather than a second page frame
+ * (BASELINE §3.3). Layout decisions key off that container, not the window.
+ */
 .section {
+  container: context-injection / inline-size;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-sizing: border-box;
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
 }
 
 .panel {
@@ -12,13 +20,13 @@
   gap: 16px;
 }
 
+/* Grouped explanatory content, not a control: R16 with the platform fill. */
 .intro {
   margin: 0;
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-module-platform);
-  font-size: 13px;
-  line-height: 22px;
+  font: var(--dsw-font-xs-13);
   color: var(--dsw-alias-label-secondary);
   overflow-wrap: anywhere;
   white-space: pre-line;
@@ -26,7 +34,7 @@
 
 .switchSectionLabel {
   margin: 4px 0 0;
-  font-size: 11px;
+  font: var(--dsw-font-xxs-12);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -56,13 +64,34 @@
 }
 
 .switchLabel {
-  font-size: 13px;
+  font: var(--dsw-font-xs-13);
   font-weight: 600;
 }
 
 .switchDesc {
-  font-size: 12px;
+  font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-secondary);
+}
+
+/* One switch's write state, in the row that produced it. */
+.saveNote {
+  margin: 0;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.saveFailure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.saveFailure p {
+  margin: 0;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-state-error-primary);
+  overflow-wrap: anywhere;
 }
 
 /* ---- Compatibility list under the master switch ---- */
@@ -76,29 +105,54 @@
   list-style: none;
 }
 
+/* The rail is a neutral separator, so it keeps the shared hairline weight. */
 .compatItem {
   display: flex;
   flex-direction: column;
   gap: 1px;
   padding-left: 10px;
-  border-left: 2px solid var(--dsw-alias-border-l2);
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .compatTitle {
-  font-size: 12px;
+  font: var(--dsw-font-xxs-12);
   font-weight: 600;
   color: var(--dsw-alias-label-secondary);
 }
 
 .compatDetail {
-  font-size: 11.5px;
-  line-height: 17px;
+  font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-tertiary);
   overflow-wrap: anywhere;
 }
 
 .unavailable {
   margin: 0;
-  font-size: 13px;
+  font: var(--dsw-font-xs-13);
   color: var(--dsw-alias-label-tertiary);
+}
+
+.unavailableHint {
+  margin: 0;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Compact arrangement by container width. The desktop settings column is about
+   560px, so the label/switch pair keeps one line there and stacks only when the
+   column is genuinely narrow (a wide window with the panel's two-column shell
+   can still leave a narrow column). */
+@container context-injection (max-width: 520px) {
+  .switchHead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* The switch row is the touch target even though the host Switch keeps its own
+   36×20 box; the whole row is not a control, so no div takes a click. */
+@media (pointer: coarse) {
+  .switchHead {
+    min-height: 44px;
+  }
 }

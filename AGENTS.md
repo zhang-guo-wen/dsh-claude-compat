@@ -101,8 +101,9 @@ npm run typecheck
 
 - host 插件导出 `{ name, inject, apply }`;`apply(ctx, config)` 里注册能力,注册一律走 `ctx.effect(...)` 收口。
 - 依赖的服务用 `ctx.get('x')` 取,**不要** `ctx.x` 属性访问 —— 未 inject 的服务属性在 Cordis 的 inject guard 下会抛错。
-- client 半边必须打成 `window.__ModuleLoader__.load({ id, factory })` 手接格式;id 与 `build-client.mjs`
-  里的 `HANDOFF_ID` 一致。改动 client 后要 bump 它或强刷浏览器,否则浏览器一直跑旧 bundle。
+- client 半边必须打成 `window.__ModuleLoader__.load({ id, factory })` 手接格式;`HANDOFF_ID` **必须始终等于包名** ——
+  它是 handoff 身份(启动图按 id 找 factory),不是 revision,改它会让 Web 启动图找不到该插件。宿主按**内容 revision**
+  提供 bundle,所以改完 client 用 `npm run build` 重建 `lib/` 即可,浏览器还跑到旧代码时硬刷新页面。
 
 ## 组合接线（cordis.patch.yml）
 
@@ -200,9 +201,9 @@ dsh plugin --profile web add github:zhang-guo-wen/dsh-claude-compat             
 
 本地目录安装时 pnpm 建的是 **symlink(记作 `link:`)** —— 所以重建 `lib/` 后**重启即生效,无需重装**。
 `file:` 依赖则可能退化成物理拷贝,那时改源码不会影响正在跑的 dsh,要重装或手动同步 `lib/`。
-client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
+client 产物变了硬刷新页面即可(不要改 `HANDOFF_ID`:它必须等于包名,见「插件契约」)。
 
-生效语义分两半。**host 半边是进程内模块**:重建 `lib/` 不会替换正在运行的代码,必须重启宿主才会加载新产物。**client 半边按内容 revision 提供**:刷新页面就能拿到新 bundle,`HANDOFF_ID` 就是这个 revision 的标识,改动 client 后必须 bump 它或强刷浏览器,否则浏览器一直跑旧 bundle。
+生效语义分两半。**host 半边是进程内模块**:重建 `lib/` 不会替换正在运行的代码,必须重启宿主才会加载新产物。**client 半边按内容 revision 提供**:重建 `lib/` 后刷新页面即可拿到新 bundle;`HANDOFF_ID` 始终等于包名(不是 revision),浏览器仍跑到旧代码时硬刷新页面。
 
 四个设置页开关是插件行的 `Volatile` 字段,所以它们不属于上面这条重启规则:设置页写入的值不经过重挂载就到达运行中的插件。
 
@@ -235,12 +236,37 @@ client 产物变了还要强刷浏览器(或 bump `HANDOFF_ID`)。
 - **四个开关做成插件行的 `Volatile` 字段,而不是另开一个 settings 命名空间** —— settings 服务一个命名空间只有一个 registrant(见「MCP 管理已拆分」),放在行 Config 上则设置页写入不需要重挂载。
 - **消息源一律用通用 `plugin` kind,不自造 kind** —— Session 格式迁移只认发布版能产出的那张固定 kind 表,自造 kind 会让历史会话打不开;harness 明确否决过"让插件注册迁移"的方案(见「易崩清单」第 5 条)。
 
+## 设置页开关的写入反馈
+
+四个开关的翻动是**异步写入**:`ContextInjectionController.toggle` 现在 await 配置表单的 `set`/`mutate`,并把每个
+开关自己的写入状态发布进同一个快照(`ContextInjectionSectionState.saves`,键是 `InjectionSwitch`)。
+`ContextInjectionSection` 把它渲染在**产生写入的那一行**里:
+
+- `saving`:该开关自己 `disabled`(避免连点并发两次写入),行内显示「保存中…」;
+- `saved`:行内显示「已保存」,2 秒后自动回落到 `idle`(定时器在 `dispose()` 里清掉);
+- `failed`:行内显示 `saveFailed` + 宿主给的原因 + 重试按钮。**开关停在宿主已提交的值**(开关位置来自 Config 快照,
+  `saves` 只影响这一行的提示),所以「重试」就是再 `toggle(name)` 一次,不需要额外的回滚。
+
+失败不清空任何数据;`memoryWrite` 依赖 `!memory` 与禁用态共用同一条 `disabled` 通路(`locked`)。设置页把
+"命名空间没挂载"的说明补成了 `unavailable` + `unavailableHint`(为什么不可用 + 去哪检查)。
+
+界面几何与排版同 `dsh-mcp-manager`:本包只贡献一个 `settings.section`,就地声明
+`container: context-injection / inline-size` + `max-width: 760px`(BASELINE §3.3),**不套一级页面的 960px 内容列**;
+字号一律 `font: var(--dsw-font-*)`;`@media (pointer: coarse)` 把开关行抬到 44px。本页没有原生文本输入,
+所以没有 16px 手机输入规则。整行点击做不到:开关是宿主 `Switch`(36×20 的 `button[role=switch]`),
+把 `div` 变成可点区域会违反"不用 div 冒充按钮",所以只把行高抬到 44px。
+
+`tests/context-injection-section.spec.tsx` 覆盖三态渲染与控制器行为(保存中 / 已保存 / 保存失败 + 重试、
+失败不改开关值、成功提示 2 秒回落),但它渲染 React,只能在装有 React 的 Harness checkout 里跑(见
+`tests/README.md`);本包没有 `npm test`,验收是 `npm run test:metadata`。
+
 ## 易崩清单
 
 1. `ctx.x` 属性访问未 inject 的服务 → 抛错(用 `ctx.get('x')`)。
 2. client 包不是 `window.__ModuleLoader__.load` 格式 → 浏览器加载失败。
 3. CSS module 里 JSX 引用但 CSS 未定义的类 → `undefined`,静默无样式(改样式后核对类名齐全)。
-4. 改 client 不 bump `HANDOFF_ID` / 不硬刷新 → 浏览器跑旧 bundle(表现为"改动没生效/开关不变")。
+4. **改了 client 但浏览器仍跑旧 bundle** → `HANDOFF_ID` 必须等于包名,不能拿它当 revision(改它会让启动图找不到该插件);
+   宿主按内容 revision 提供 bundle,重建 `lib/` 后硬刷新页面即可(表现为"改动没生效/开关不变")。
 5. **自造 message source kind → 用过的会话以后打不开。** `MessageSourceMap` 是可合并扩展的,但 Session 格式
    的 V2→V3 迁移只认发布版能产出的那张固定 kind 表(`session-format-v2-to-v3/src/payload.ts` 的
    `SOURCE_KINDS`),遇到不认识的 kind 会**拒绝迁移整份会话**("cannot safely transform unclassified message

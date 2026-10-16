@@ -1,8 +1,13 @@
 /**
  * Controller bridging the Host `claude-compat` settings namespace onto the
  * Harness-compat section snapshot. Reads the compatibility switches for
- * skills, memory loading and writing, and scoped rules, then flips one through the
- * configuration form.
+ * skills, memory loading and writing, and scoped rules, then flips one through
+ * the configuration form.
+ *
+ * A flip is asynchronous, so each switch publishes its own write state: the
+ * section shows 保存中 / 已保存 / 失败 beside the switch that was flipped, and
+ * the Host's committed value stays the source of the switch position (a failed
+ * write therefore leaves the switch where it was).
  *
  * @module @guowenzhang/dsh-claude-compat/client/settings-controller
  */
@@ -24,6 +29,17 @@ export interface ContextInjectionFlags {
 /** One switchable part of the compatibility surface. */
 export type InjectionSwitch = keyof ContextInjectionFlags
 
+/** One switch's write, as the section reports it. */
+export type SwitchSave =
+  | { readonly phase: 'idle' | 'saving' | 'saved' }
+  | { readonly phase: 'failed'; readonly message: string }
+
+/** The resting write state, shared because it carries no per-switch data. */
+const IDLE: SwitchSave = { phase: 'idle' }
+
+/** How long a successful write keeps its note before the row goes quiet. */
+const SAVED_NOTE_MS = 2_000
+
 /** Snapshot the section renders. */
 export interface ContextInjectionSectionState {
   /** Whether the namespace is exposed to this client. */
@@ -34,6 +50,8 @@ export interface ContextInjectionSectionState {
   memory: boolean
   memoryWrite: boolean
   rules: boolean
+  /** Per-switch write state, so one failed write is reported where it happened. */
+  saves: Readonly<Record<InjectionSwitch, SwitchSave>>
 }
 
 /** Registration-side face for the section. */
@@ -42,14 +60,20 @@ export interface ContextInjectionSectionFace {
     /** Section snapshot bound by the renderer as useContextInjection. */
     contextInjection: SnapshotStore<ContextInjectionSectionState>
   }
-  /** Flip one compatibility switch. */
-  toggle: (name: InjectionSwitch) => void
+  /**
+   * Flip one compatibility switch and resolve after the Host answered. The
+   * same call retries a failed flip, because a failure leaves the switch on the
+   * value the Host committed.
+   */
+  toggle: (name: InjectionSwitch) => Promise<void>
 }
 
-/** Owner handle over the `context-injection` namespace. */
+/** Owner handle over the `claude-compat` namespace. */
 export class ContextInjectionController {
   private readonly store: SnapshotStore<ContextInjectionSectionState>
   private readonly unsubscribe: () => void
+  private readonly saves = new Map<InjectionSwitch, SwitchSave>()
+  private readonly saveTimers = new Map<InjectionSwitch, ReturnType<typeof setTimeout>>()
 
   /**
    * @param scope - the `claude-compat` configuration form.
@@ -59,34 +83,60 @@ export class ContextInjectionController {
     this.unsubscribe = scope.subscribe(() => this.publish())
   }
 
-  /** Stop observing settings. */
+  /** Stop observing settings and drop any pending note timers. */
   dispose(): void {
     this.unsubscribe()
+    for (const timer of this.saveTimers.values()) clearTimeout(timer)
+    this.saveTimers.clear()
   }
 
   /** Build the renderer face for this section. */
   inject(): ContextInjectionSectionFace {
     return {
       hooks: { contextInjection: this.store },
-      toggle: name => { this.toggle(name) },
+      toggle: name => this.toggle(name),
     }
   }
 
-  private toggle(name: InjectionSwitch): void {
+  private async toggle(name: InjectionSwitch): Promise<void> {
     const snapshot = this.scope.getSnapshot()
     if (snapshot.status !== 'ready' || !snapshot.writable) return
     const value = snapshot.value?.[name]
     if (value === undefined) return
     if (name === 'memoryWrite' && !snapshot.value?.memory) return
-    if (name === 'memory' && value && snapshot.value?.memoryWrite) {
-      // Commit both fields in one Host mutation, so no saved state violates the dependency.
-      void this.scope.mutate([
-        { op: 'set', path: ['memoryWrite'], value: false },
-        { op: 'set', path: ['memory'], value: false },
-      ])
+    this.setSave(name, { phase: 'saving' })
+    try {
+      if (name === 'memory' && value && snapshot.value?.memoryWrite) {
+        // Commit both fields in one Host mutation, so no saved state violates the dependency.
+        await this.scope.mutate([
+          { op: 'set', path: ['memoryWrite'], value: false },
+          { op: 'set', path: ['memory'], value: false },
+        ])
+      } else {
+        await this.scope.set(name, !value)
+      }
+    } catch (error) {
+      this.setSave(name, { phase: 'failed', message: error instanceof Error ? error.message : String(error) })
       return
     }
-    void this.scope.set(name, !value)
+    this.setSave(name, { phase: 'saved' })
+    this.scheduleNoteClear(name)
+  }
+
+  /** Publish one switch's write state, which is what the section renders. */
+  private setSave(name: InjectionSwitch, save: SwitchSave): void {
+    this.saves.set(name, save)
+    this.publish()
+  }
+
+  /** Drop a success note after a moment, so it does not become a permanent label. */
+  private scheduleNoteClear(name: InjectionSwitch): void {
+    const previous = this.saveTimers.get(name)
+    if (previous !== undefined) clearTimeout(previous)
+    this.saveTimers.set(name, setTimeout(() => {
+      this.saveTimers.delete(name)
+      if (this.saves.get(name)?.phase === 'saved') this.setSave(name, IDLE)
+    }, SAVED_NOTE_MS))
   }
 
   private projection(): ContextInjectionSectionState {
@@ -98,6 +148,12 @@ export class ContextInjectionController {
       memory: snapshot.value?.memory ?? true,
       memoryWrite: (snapshot.value?.memory ?? true) && (snapshot.value?.memoryWrite ?? false),
       rules: snapshot.value?.rules ?? true,
+      saves: {
+        skills: this.saves.get('skills') ?? IDLE,
+        memory: this.saves.get('memory') ?? IDLE,
+        memoryWrite: this.saves.get('memoryWrite') ?? IDLE,
+        rules: this.saves.get('rules') ?? IDLE,
+      },
     }
   }
 

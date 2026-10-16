@@ -10,7 +10,7 @@ In the plugin list, display names and descriptions follow the Harness language s
 
 ## Screenshot
 
-**Settings → Claude compatibility**: enable skill loading, memory loading, memory writing, and rule loading as needed.
+**Settings → Claude compatibility**: enable skill loading, memory loading, memory writing, and rule loading as needed. Each switch reports its own saving / saved / failed state, with a retry when a write is refused.
 
 ![Claude compatibility settings](<docs/images/claude-compat-settings.png>)
 

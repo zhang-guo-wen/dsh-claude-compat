@@ -39,7 +39,12 @@ const zh = {
   'rules.desc': '折叠 .claude/rules/** 作用域规则',
   'rules.entry': '作用域规则',
   'rules.entry.detail': '.claude/rules/**、~/.claude/rules/** —— 不带 paths 的会话开始时注入，带 paths 的在读到匹配文件后注入',
+  'saving': '保存中…',
+  'saved': '已保存',
+  'saveFailed': '开关未生效：',
+  'retry': '重试',
   'unavailable': '设置当前不可用',
+  'unavailableHint': '这个部署没有挂载 claude-compat 设置命名空间。确认插件行已在 profile 里启用（这四个开关由插件行的 Config 提供）。',
 }
 /** Key union, sourced from the Chinese dictionary. */
 export type ContextInjectionSectionKey = keyof typeof zh
@@ -71,7 +76,12 @@ const en: Record<ContextInjectionSectionKey, string> = {
   'rules.desc': 'Fold the .claude/rules/** scoped rules',
   'rules.entry': 'Scoped rules',
   'rules.entry.detail': '.claude/rules/**, ~/.claude/rules/** — rules without paths fold at session start; a paths: rule folds after a read matching it',
+  'saving': 'Saving…',
+  'saved': 'Saved',
+  'saveFailed': 'The switch did not take effect:',
+  'retry': 'Retry',
   'unavailable': 'Setting currently unavailable',
+  'unavailableHint': 'This deployment does not mount the claude-compat settings namespace. Check that the plugin row is enabled in the profile: these four switches come from that row’s Config.',
 }
 
 export { zh, en }
