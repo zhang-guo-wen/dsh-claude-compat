@@ -4,14 +4,17 @@
  * It holds one switch per part of the compatibility surface — skills, memory
  * loading and writing, and scoped rules — and lists under each what it does, so
  * the page states the compatibility surface itself instead of pointing at the
- * README. Each switch reports its own write: saving, saved, or failed with a
- * retry, next to the switch it belongs to.
+ * README. A flip in flight and a flip that failed stay beside their own switch:
+ * the failure carries the retry that presses that same switch again. A landed
+ * flip is reported in the host's floating banner instead, which is where a long
+ * page cannot scroll it away, and it names the switch it belongs to because the
+ * banner is no longer next to any row.
  *
  * @module @guowenzhang/dsh-claude-compat/client/ContextInjectionSection
  */
 
-import type { ReactNode } from 'react'
-import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Button, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ContextInjectionSectionFace, InjectionSwitch } from './settings-controller.ts'
 import type { ContextInjectionSectionKey } from './locales.ts'
@@ -81,6 +84,21 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
   const { useContextInjection, t, toggle } = props
   const state = useContextInjection(snapshot => snapshot)
   const disabled = !state.available || !state.writable
+  /**
+   * The landed flip as the host's floating banner reports it. The controller
+   * clears each switch's `saved` phase on its own timer, so this tracks the one
+   * that arrived last and names it: the banner is not beside any row. The banner
+   * owns its own lifetime and reports completion, exactly as the archive report
+   * does; nothing here measures it a second time.
+   */
+  const [landed, setLanded] = useState<{ text: string; seq: number } | null>(null)
+  const landedSeq = useRef(0)
+  useEffect(() => {
+    const saved = COMPAT_SWITCHES.find(entry => state.saves[entry.name].phase === 'saved')
+    if (saved === undefined) return
+    landedSeq.current += 1
+    setLanded({ text: `${t('saved')} · ${t(saved.label)}`, seq: landedSeq.current })
+  }, [state.saves, t])
 
   return (
     <div className={css.section}>
@@ -108,9 +126,11 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
                     title={disabled ? t('unavailable') : locked ? t('memoryWrite.requiresMemory') : undefined}
                   />
                 </div>
-                {/* The write's own state, beside the switch that produced it. */}
+                {/* A flip in flight and a failed flip stay beside their switch:
+                    the retry has to sit next to the control it presses again.
+                    The landed flip is the banner's, so a long page cannot
+                    scroll the answer away from the row that produced it. */}
                 {save.phase === 'saving' ? <p className={css.saveNote} role="status">{t('saving')}</p> : null}
-                {save.phase === 'saved' ? <p className={css.saveNote} role="status">{t('saved')}</p> : null}
                 {save.phase === 'failed' ? (
                   <div className={css.saveFailure}>
                     <p role="alert">{`${t('saveFailed')} ${save.message}`}</p>
@@ -143,6 +163,10 @@ export function ContextInjectionSection(props: ContextInjectionSectionProps): Re
           </>
         ) : null}
       </div>
+      {/* One landed flip, in the host's floating banner: it portals to the body,
+          so it is readable whatever the page's own scroll position is. */}
+      {landed !== null ? <Toast key={landed.seq} text={landed.text} tone="success"
+        onDone={() => { setLanded(current => current?.seq === landed.seq ? null : current) }} /> : null}
     </div>
   )
 }
