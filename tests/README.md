@@ -2,8 +2,21 @@
 
 This repository is a standalone package: its specs are not part of the Harness
 monorepo test gate, and it installs neither the Harness runtime packages the
-composition specs mount nor React. The Harness checkout beside it owns the
-`vitest` binary, so both commands below run **from that checkout**.
+composition specs mount nor React. The Harness checkout owns the `vitest` binary,
+so both commands below run **from that checkout**.
+
+The checkout is the package's sibling directory by default; set `DSH_HARNESS_ROOT`
+when it lives elsewhere (a linked worktree, or this package sitting beside
+`deepseekharness` in the plugin workspace). The config resolves the shared
+plugin, `typescript`, the `tsconfig.base.json` source aliases, the pnpm store and
+the borrowed agent-loop test adapter from that root, so the package no longer has
+to sit *inside* the checkout:
+
+```sh
+# From the Harness checkout root, with the package as its sibling.
+DSH_HARNESS_ROOT=. node_modules/.bin/vitest run \
+  --root ../dsh-claude-compat --config vitest.harness.config.ts
+```
 
 ## Full suite (recommended)
 
