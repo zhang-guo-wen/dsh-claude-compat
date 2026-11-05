@@ -10,13 +10,13 @@ paths:
   - "lib/**"
 ---
 
-覆盖什么、何时读：`npm run build` 的两段打包（tsdown / rolldown）与 TC39 装饰器降级，以及 specs 在姊妹 Harness checkout 里的两种跑法与各自覆盖范围。改构建配置、改 host/client 入口，或在验收前确认该跑哪套测试时读我。
+覆盖什么、何时读：`pnpm run build` 的两段打包（tsdown / rolldown）与 TC39 装饰器降级，以及 specs 在姊妹 Harness checkout 里的两种跑法与各自覆盖范围。改构建配置、改 host/client 入口，或在验收前确认该跑哪套测试时读我。
 
 # 构建与验证(specs)
 
 ## 构建
 
-`npm run build` 跑两段打包:
+`pnpm run build` 跑两段打包:
 
 - host:`tsdown` 打 `src/index.ts` → `lib/index.mjs`,所有 `@deepseek-ai/*` 保持 external。
 - client:`build-client.mjs`(rolldown)→ `lib/client.js`,包成 `window.__ModuleLoader__.load({ id, factory })`,
@@ -27,8 +27,8 @@ paths:
 少了它,`@Remote` 会以原始语法留在 `lib/index.mjs`,host 加载即崩。
 
 ```sh
-npm run build      # host（tsdown）+ client（rolldown ModuleLoader handoff）
-npm run typecheck
+pnpm run build      # host（tsdown）+ client（rolldown ModuleLoader handoff）
+pnpm run typecheck
 ```
 
 ## 验证(specs)

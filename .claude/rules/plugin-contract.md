@@ -16,7 +16,7 @@ paths:
 - 依赖的服务用 `ctx.get('x')` 取,**不要** `ctx.x` 属性访问 —— 未 inject 的服务属性在 Cordis 的 inject guard 下会抛错。
 - client 半边必须打成 `window.__ModuleLoader__.load({ id, factory })` 手接格式;`HANDOFF_ID` **必须始终等于包名** ——
   它是 handoff 身份(启动图按 id 找 factory),不是 revision,改它会让 Web 启动图找不到该插件。宿主按**内容 revision**
-  提供 bundle,所以改完 client 用 `npm run build` 重建 `lib/` 即可,浏览器还跑到旧代码时硬刷新页面。
+  提供 bundle,所以改完 client 用 `pnpm run build` 重建 `lib/` 即可,浏览器还跑到旧代码时硬刷新页面。
 
 ## 组合接线（cordis.patch.yml）
 

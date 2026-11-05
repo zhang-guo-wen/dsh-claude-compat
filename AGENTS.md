@@ -15,7 +15,7 @@ MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见 [.claude/rules/mcp
   共享的文件读取与项目根上溯在 `src/file-text.ts`,共用的 `Instructions from:` 渲染在 `src/render.ts`;
   消息源在 `src/sources.ts`。
 - `lib/` —— 构建产物:**已提交进仓库**(`index.mjs` host + `client.js` 浏览器 handoff),
-  这样别人可以直接从 git 安装。改完源码**记得 `npm run build` 并把 `lib/` 一起提交**。
+  这样别人可以直接从 git 安装。改完源码**记得 `pnpm run build` 并把 `lib/` 一起提交**。
 - `cordis.patch.yml` —— 把插件行插入组合的 bundle 层。
 - `docs/implementation.md` —— 实现说明(设计理念、源码地图、Model Experience)。
   它与根 `README.md`(面向使用者)内容不同,扁平化时从旧的包内 `README.md` 保留下来。
@@ -24,12 +24,12 @@ MCP 管理是另一个仓(`@guowenzhang/dsh-mcp-manager`),见 [.claude/rules/mcp
 ## 构建、测试与验证命令
 
 ```sh
-npm run build         # host（tsdown）+ client（rolldown ModuleLoader handoff）
-npm run typecheck     # 类型检查,不生成文件
-npm run test:metadata # 本包自己的验收脚本
+pnpm run build         # host（tsdown）+ client（rolldown ModuleLoader handoff）
+pnpm run typecheck     # 类型检查,不生成文件
+pnpm run test:metadata # 本包自己的验收脚本
 ```
 
-本包**没有 `npm test`**:specs 在**姊妹 Harness checkout** 里跑(那个目录才有 `vitest`),从 checkout 根执行:
+本包**没有 `pnpm test`**:specs 在**姊妹 Harness checkout** 里跑(那个目录才有 `vitest`),从 checkout 根执行:
 
 ```sh
 node_modules/.bin/vitest run --root dsh-claude-compat                                   # 自足子集
@@ -47,7 +47,7 @@ node_modules/.bin/vitest run --root dsh-claude-compat --config vitest.harness.co
 2. **依赖的服务用 `ctx.get('x')` 取,不要 `ctx.x` 属性访问** —— 未 inject 的服务属性在 Cordis 的 inject guard 下会抛错。
 3. **client 半边必须打成 `window.__ModuleLoader__.load({ id, factory })` 格式**;`HANDOFF_ID` **必须始终等于包名** ——
    它是 handoff 身份(启动图按 id 找 factory),不是 revision,改它会让 Web 启动图找不到该插件。
-4. **`lib/` 是提交进仓库的构建产物** —— 改完源码必须 `npm run build`,并把 `lib/` 与源码一起提交。
+4. **`lib/` 是提交进仓库的构建产物** —— 改完源码必须 `pnpm run build`,并把 `lib/` 与源码一起提交。
 5. **消息源一律用通用 `plugin` kind,不自造 kind** —— Session 格式迁移只认发布版能产出的那张固定 kind 表,
    自造 kind 会让历史会话打不开(代价见 [.claude/rules/pitfalls.md](.claude/rules/pitfalls.md) 第 5 条)。
 6. **Node 不解析 TC39 装饰器** —— `tsdown.config.ts` 的 `lowerDecorators` transform 不能删,

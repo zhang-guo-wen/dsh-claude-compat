@@ -65,5 +65,5 @@ paths:
 开与关各自只出现自己那一行、静止态只有 footer 一个 `<p>`、五个开关互不影响、保存中 / 保存失败 + 重试、
 失败不改开关值、成功提示 2 秒回落):静态渲染断言用 `renderToStaticMarkup`,"已保存进宿主浮层"那条用
 `// @vitest-environment jsdom` + `react-dom/client` 挂载后断言浮层文案(SSR 不跑 effect,静态渲染看不到浮层)。
-它渲染 React,只能在装有 React 的 Harness checkout 里跑(见 `tests/README.md`);本包没有 `npm test`,
-验收是 `npm run test:metadata`。
+它渲染 React,只能在装有 React 的 Harness checkout 里跑(见 `tests/README.md`);本包没有 `pnpm test`,
+验收是 `pnpm run test:metadata`。
